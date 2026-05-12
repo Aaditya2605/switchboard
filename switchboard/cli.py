@@ -12,6 +12,7 @@ from switchboard.launchd import DEFAULT_LABEL, LaunchdInstaller
 from switchboard.scheduler import Scheduler
 from switchboard.service import SwitchboardService
 from switchboard.telegram import handle_telegram_command
+from switchboard.telegram_bot import TelegramBot, load_bot_config
 from switchboard.tmux import TmuxClient
 
 app = typer.Typer(help="Switchboard: command center for Claude Code and Codex agents.")
@@ -41,6 +42,10 @@ def launchd_installer(label: str = DEFAULT_LABEL) -> LaunchdInstaller:
         launch_agents_dir=launch_agents_dir(),
         label=label,
     )
+
+
+def telegram_bot() -> TelegramBot:
+    return TelegramBot(load_bot_config())
 
 
 def fail(exc: Exception) -> None:
@@ -343,6 +348,53 @@ def telegram_handle(text: str) -> None:
         typer.echo(handle_telegram_command(service(), text))
     except (KeyError, ValueError) as exc:
         fail(exc)
+
+
+@telegram_app.command("poll")
+def telegram_poll(
+    once: bool = typer.Option(False, "--once", help="Poll once and exit."),
+    timeout: int = typer.Option(30, "--timeout", help="Long-poll timeout in seconds."),
+) -> None:
+    try:
+        bot = telegram_bot()
+        if once:
+            handled = bot.poll_once(lambda text: handle_telegram_command(service(), text), timeout=timeout)
+            typer.echo(f"Handled {handled} update(s)")
+            return
+        typer.echo("Starting Telegram polling. Press Ctrl+C to stop.")
+        while True:
+            handled = bot.poll_once(lambda text: handle_telegram_command(service(), text), timeout=timeout)
+            if handled:
+                typer.echo(f"Handled {handled} update(s)")
+    except (KeyError, ValueError) as exc:
+        fail(exc)
+
+
+@telegram_app.command("set-webhook")
+def telegram_set_webhook(url: str) -> None:
+    try:
+        telegram_bot().set_webhook(url)
+    except ValueError as exc:
+        fail(exc)
+    typer.echo("Webhook set")
+
+
+@telegram_app.command("delete-webhook")
+def telegram_delete_webhook() -> None:
+    try:
+        telegram_bot().delete_webhook()
+    except ValueError as exc:
+        fail(exc)
+    typer.echo("Webhook deleted")
+
+
+@telegram_app.command("webhook-info")
+def telegram_webhook_info() -> None:
+    try:
+        info = telegram_bot().webhook_info()
+    except ValueError as exc:
+        fail(exc)
+    typer.echo(info)
 
 
 if __name__ == "__main__":

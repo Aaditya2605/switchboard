@@ -14,7 +14,7 @@ Switchboard Lite is the local MVP:
 - manage shared tasks with priority, repo, due dates, and comments
 - store and run reusable workflow prompts
 - run due workflow prompts with a scheduler daemon
-- handle Telegram-style commands through Hermes
+- handle Telegram-style commands through Hermes or a real Telegram bot
 - detect dead/live tmux agent sessions
 
 ## Install/dev
@@ -81,7 +81,7 @@ uv run --with-editable . switchboard scheduler launchd-status
 uv run --with-editable . switchboard scheduler uninstall-launchd --dry-run
 ```
 
-Telegram/Hermes bridge:
+Telegram/Hermes bridge and bot:
 
 ```bash
 uv run --with-editable . switchboard telegram handle "/agents"
@@ -90,6 +90,13 @@ uv run --with-editable . switchboard telegram handle "/inbox backend"
 uv run --with-editable . switchboard telegram handle "/health all"
 uv run --with-editable . switchboard telegram handle "/send backend Run tests"
 uv run --with-editable . switchboard telegram handle "/scheduler tick"
+
+export SWITCHBOARD_TELEGRAM_BOT_TOKEN="[REDACTED]"
+export SWITCHBOARD_TELEGRAM_ALLOWED_CHAT_IDS="123456789"
+uv run --with-editable . switchboard telegram poll --once --timeout 30
+uv run --with-editable . switchboard telegram set-webhook https://example.com/switchboard
+uv run --with-editable . switchboard telegram webhook-info
+uv run --with-editable . switchboard telegram delete-webhook
 ```
 
 Use `--dry-run` to register an agent without launching tmux:
@@ -114,5 +121,4 @@ SWITCHBOARD_HOME=/tmp/switchboard-test uv run --with-editable . switchboard init
 
 ## Roadmap
 
-- dedicated Telegram bot/webhook auth
 - FastAPI + dashboard
