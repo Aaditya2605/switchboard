@@ -40,12 +40,15 @@ def test_telegram_agents_lists_registered_agents(tmp_path):
 def test_telegram_tasks_lists_tasks_by_status(tmp_path):
     service, _ = make_service(tmp_path)
     service.create_task("Fix auth", assigned_agent="backend")
-    service.create_task("Ship docs", assigned_agent="reviewer")
+    service.create_task("Ship docs", assigned_agent="reviewer", priority="high", repo="~/docs", due_date="2026-05-20")
     service.move_task(2, "completed")
 
     response = handle_telegram_command(service, "/tasks completed")
 
     assert "Ship docs" in response
+    assert "high" in response
+    assert "~/docs" in response
+    assert "2026-05-20" in response
     assert "Fix auth" not in response
 
 

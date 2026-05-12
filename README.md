@@ -11,7 +11,7 @@ Switchboard Lite is the local MVP:
 - stop agents
 - store agent state in SQLite
 - queue agent-to-agent messages
-- manage shared tasks
+- manage shared tasks with priority, repo, due dates, and comments
 - store and run reusable workflow prompts
 - run due workflow prompts with a scheduler daemon
 - handle Telegram-style commands through Hermes
@@ -49,8 +49,11 @@ uv run --with-editable . switchboard msg reviewer backend "Need the API schema" 
 Shared task board:
 
 ```bash
-uv run --with-editable . switchboard task add "Fix auth" --description "Run tests first" --agent backend
+uv run --with-editable . switchboard task add "Fix auth" --description "Run tests first" --agent backend --priority high --repo ~/projects/myapp --due 2026-05-20
 uv run --with-editable . switchboard task list
+uv run --with-editable . switchboard task update 1 --priority urgent --repo ~/projects/myapp --due 2026-05-21
+uv run --with-editable . switchboard task comment 1 "Waiting on API schema" --author reviewer
+uv run --with-editable . switchboard task comments 1
 uv run --with-editable . switchboard task assign 1 reviewer
 uv run --with-editable . switchboard task move 1 in_progress
 uv run --with-editable . switchboard task move 1 completed

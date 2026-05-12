@@ -1,8 +1,17 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 
-from switchboard.db import AgentRecord, AgentRepository, MessageRecord, TaskRecord, WorkflowRecord
+from switchboard.db import (
+    VALID_TASK_PRIORITIES,
+    AgentRecord,
+    AgentRepository,
+    MessageRecord,
+    TaskCommentRecord,
+    TaskRecord,
+    WorkflowRecord,
+)
 from switchboard.tmux import TmuxClient
 
 
@@ -51,10 +60,19 @@ class SwitchboardService:
         self._require_agent(agent_name)
         return self.agents.inbox(agent_name)
 
-    def create_task(self, title: str, description: str = "", assigned_agent: str | None = None) -> TaskRecord:
+    def create_task(
+        self,
+        title: str,
+        description: str = "",
+        assigned_agent: str | None = None,
+        priority: str = "normal",
+        repo: str | None = None,
+        due_date: str | None = None,
+    ) -> TaskRecord:
         if assigned_agent:
             self._require_agent(assigned_agent)
-        return self.agents.create_task(title, description, assigned_agent)
+        self._validate_task_metadata(priority=priority, due_date=due_date)
+        return self.agents.create_task(title, description, assigned_agent, priority=priority, repo=repo, due_date=due_date)
 
     def list_tasks(self, status: str | None = None) -> list[TaskRecord]:
         return self.agents.list_tasks(status=status)
@@ -65,6 +83,24 @@ class SwitchboardService:
 
     def move_task(self, task_id: int, status: str) -> TaskRecord:
         return self.agents.move_task(task_id, status)
+
+    def update_task_metadata(
+        self,
+        task_id: int,
+        priority: str | None = None,
+        repo: str | None = None,
+        due_date: str | None = None,
+    ) -> TaskRecord:
+        self._validate_task_metadata(priority=priority, due_date=due_date)
+        return self.agents.update_task_metadata(task_id, priority=priority, repo=repo, due_date=due_date)
+
+    def add_task_comment(self, task_id: int, author: str, body: str) -> TaskCommentRecord:
+        if not body.strip():
+            raise ValueError("comment body cannot be empty")
+        return self.agents.add_task_comment(task_id, author=author, body=body)
+
+    def list_task_comments(self, task_id: int) -> list[TaskCommentRecord]:
+        return self.agents.list_task_comments(task_id)
 
     def create_workflow(self, name: str, agent_name: str, prompt: str, cron: str) -> WorkflowRecord:
         self._require_agent(agent_name)
@@ -106,6 +142,16 @@ class SwitchboardService:
         if agent is None:
             raise KeyError(f"Unknown agent: {name}")
         return agent
+
+    @staticmethod
+    def _validate_task_metadata(priority: str | None = None, due_date: str | None = None) -> None:
+        if priority is not None and priority not in VALID_TASK_PRIORITIES:
+            raise ValueError(f"Invalid task priority: {priority}")
+        if due_date:
+            try:
+                date.fromisoformat(due_date)
+            except ValueError as exc:
+                raise ValueError("due date must be YYYY-MM-DD") from exc
 
     @staticmethod
     def _slug(name: str) -> str:

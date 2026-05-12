@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-REQUIRED_TABLES = ("agents", "messages", "tasks", "runs", "workflows")
+REQUIRED_TABLES = ("agents", "messages", "tasks", "runs", "workflows", "task_comments")
 VALID_TASK_STATUSES = {"assigned", "in_progress", "blocked", "completed"}
+VALID_TASK_PRIORITIES = {"low", "normal", "high", "urgent"}
 
 
 @dataclass(frozen=True)
@@ -35,7 +36,17 @@ class TaskRecord:
     description: str = ""
     status: str = "assigned"
     assigned_agent: str | None = None
+    priority: str = "normal"
+    repo: str | None = None
+    due_date: str | None = None
 
+@dataclass(frozen=True)
+class TaskCommentRecord:
+    id: int
+    task_id: int
+    author: str
+    body: str
+    created_at: str
 
 @dataclass(frozen=True)
 class WorkflowRecord:
@@ -96,8 +107,19 @@ def init_db(db_path: Path | None = None) -> Path:
                 description TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'assigned',
                 assigned_agent TEXT,
+                priority TEXT NOT NULL DEFAULT 'normal',
+                repo TEXT,
+                due_date TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS task_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                author TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS runs (
@@ -122,6 +144,7 @@ def init_db(db_path: Path | None = None) -> Path:
             """
         )
         _migrate_workflows(conn)
+        _migrate_tasks(conn)
     return path
 
 
@@ -188,6 +211,20 @@ def _migrate_workflows(conn: sqlite3.Connection) -> None:
         return
 
     raise RuntimeError(f"Unsupported workflows schema columns: {sorted(columns)}")
+
+
+def _task_columns(conn: sqlite3.Connection) -> set[str]:
+    return {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+
+
+def _migrate_tasks(conn: sqlite3.Connection) -> None:
+    columns = _task_columns(conn)
+    if "priority" not in columns:
+        conn.execute("ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'")
+    if "repo" not in columns:
+        conn.execute("ALTER TABLE tasks ADD COLUMN repo TEXT")
+    if "due_date" not in columns:
+        conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
 
 
 class AgentRepository:
@@ -282,11 +319,22 @@ class AgentRepository:
             raise KeyError(f"Unknown message: {message_id}")
         return message
 
-    def create_task(self, title: str, description: str = "", assigned_agent: str | None = None) -> TaskRecord:
+    def create_task(
+        self,
+        title: str,
+        description: str = "",
+        assigned_agent: str | None = None,
+        priority: str = "normal",
+        repo: str | None = None,
+        due_date: str | None = None,
+    ) -> TaskRecord:
         with connect(self.db_path) as conn:
             cur = conn.execute(
-                "INSERT INTO tasks(title, description, assigned_agent) VALUES (?, ?, ?)",
-                (title, description, assigned_agent),
+                """
+                INSERT INTO tasks(title, description, assigned_agent, priority, repo, due_date)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (title, description, assigned_agent, priority, repo, due_date),
             )
             task_id = cur.lastrowid
         task = self.get_task(task_id)
@@ -323,6 +371,56 @@ class AgentRepository:
                 (status, task_id),
             )
         return self._require_task(task_id)
+
+    def update_task_metadata(
+        self,
+        task_id: int,
+        priority: str | None = None,
+        repo: str | None = None,
+        due_date: str | None = None,
+    ) -> TaskRecord:
+        fields: list[str] = []
+        values: list[str | int | None] = []
+        if priority is not None:
+            fields.append("priority = ?")
+            values.append(priority)
+        if repo is not None:
+            fields.append("repo = ?")
+            values.append(repo)
+        if due_date is not None:
+            fields.append("due_date = ?")
+            values.append(due_date)
+        if fields:
+            values.append(task_id)
+            with connect(self.db_path) as conn:
+                conn.execute(
+                    f"UPDATE tasks SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    tuple(values),
+                )
+        return self._require_task(task_id)
+
+    def add_task_comment(self, task_id: int, author: str, body: str) -> TaskCommentRecord:
+        self._require_task(task_id)
+        with connect(self.db_path) as conn:
+            cur = conn.execute(
+                "INSERT INTO task_comments(task_id, author, body) VALUES (?, ?, ?)",
+                (task_id, author, body),
+            )
+            comment_id = cur.lastrowid
+        comment = self.get_task_comment(comment_id)
+        assert comment is not None
+        return comment
+
+    def get_task_comment(self, comment_id: int) -> TaskCommentRecord | None:
+        with connect(self.db_path) as conn:
+            row = conn.execute("SELECT * FROM task_comments WHERE id = ?", (comment_id,)).fetchone()
+        return self._task_comment_from_row(row) if row else None
+
+    def list_task_comments(self, task_id: int) -> list[TaskCommentRecord]:
+        self._require_task(task_id)
+        with connect(self.db_path) as conn:
+            rows = conn.execute("SELECT * FROM task_comments WHERE task_id = ? ORDER BY id", (task_id,)).fetchall()
+        return [self._task_comment_from_row(row) for row in rows]
 
     def create_workflow(self, name: str, agent_name: str, prompt: str, cron: str) -> WorkflowRecord:
         with connect(self.db_path) as conn:
@@ -420,6 +518,19 @@ class AgentRepository:
             description=row["description"],
             status=row["status"],
             assigned_agent=row["assigned_agent"],
+            priority=row["priority"],
+            repo=row["repo"],
+            due_date=row["due_date"],
+        )
+
+    @staticmethod
+    def _task_comment_from_row(row: sqlite3.Row) -> TaskCommentRecord:
+        return TaskCommentRecord(
+            id=row["id"],
+            task_id=row["task_id"],
+            author=row["author"],
+            body=row["body"],
+            created_at=row["created_at"],
         )
 
     @staticmethod

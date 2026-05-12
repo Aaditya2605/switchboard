@@ -119,13 +119,26 @@ def health(name: str | None = typer.Argument(None), all: bool = typer.Option(Fal
 
 
 @task_app.command("add")
-def task_add(title: str, description: str = typer.Option("", "--description", "-d"), agent: str | None = typer.Option(None, "--agent", "-a")) -> None:
+def task_add(
+    title: str,
+    description: str = typer.Option("", "--description", "-d"),
+    agent: str | None = typer.Option(None, "--agent", "-a"),
+    priority: str = typer.Option("normal", "--priority", "-p"),
+    repo: str | None = typer.Option(None, "--repo", "-r"),
+    due: str | None = typer.Option(None, "--due", help="Due date as YYYY-MM-DD."),
+) -> None:
     try:
-        task = service().create_task(title, description=description, assigned_agent=agent)
-    except KeyError as exc:
+        task = service().create_task(
+            title,
+            description=description,
+            assigned_agent=agent,
+            priority=priority,
+            repo=repo,
+            due_date=due,
+        )
+    except (KeyError, ValueError) as exc:
         fail(exc)
-    assignee = task.assigned_agent or "unassigned"
-    typer.echo(f"Created task #{task.id}: {task.title} [{task.status}] assigned={assignee}")
+    typer.echo(f"Created task {format_task(task)}")
 
 
 @task_app.command("list")
@@ -135,8 +148,7 @@ def task_list(status: str | None = typer.Option(None, "--status", "-s")) -> None
         typer.echo("No tasks found.")
         return
     for task in tasks:
-        assignee = task.assigned_agent or "unassigned"
-        typer.echo(f"#{task.id}\t{task.status}\t{assignee}\t{task.title}")
+        typer.echo(format_task(task))
 
 
 @task_app.command("assign")
@@ -155,6 +167,49 @@ def task_move(task_id: int, status: str) -> None:
     except (KeyError, ValueError) as exc:
         fail(exc)
     typer.echo(f"Moved task #{task.id} to {task.status}")
+
+
+@task_app.command("update")
+def task_update(
+    task_id: int,
+    priority: str | None = typer.Option(None, "--priority", "-p"),
+    repo: str | None = typer.Option(None, "--repo", "-r"),
+    due: str | None = typer.Option(None, "--due", help="Due date as YYYY-MM-DD."),
+) -> None:
+    try:
+        task = service().update_task_metadata(task_id, priority=priority, repo=repo, due_date=due)
+    except (KeyError, ValueError) as exc:
+        fail(exc)
+    typer.echo(f"Updated task {format_task(task)}")
+
+
+@task_app.command("comment")
+def task_comment(task_id: int, body: str, author: str = typer.Option("user", "--author", "-a")) -> None:
+    try:
+        comment = service().add_task_comment(task_id, author=author, body=body)
+    except (KeyError, ValueError) as exc:
+        fail(exc)
+    typer.echo(f"Added comment #{comment.id} to task #{comment.task_id}")
+
+
+@task_app.command("comments")
+def task_comments(task_id: int) -> None:
+    try:
+        comments = service().list_task_comments(task_id)
+    except KeyError as exc:
+        fail(exc)
+    if not comments:
+        typer.echo(f"No comments for task #{task_id}.")
+        return
+    for comment in comments:
+        typer.echo(f"#{comment.id}\t{comment.created_at}\t{comment.author}\t{comment.body}")
+
+
+def format_task(task) -> str:
+    assignee = task.assigned_agent or "unassigned"
+    repo = task.repo or "-"
+    due = task.due_date or "-"
+    return f"#{task.id}\t{task.status}\t{assignee}\t{task.priority}\trepo={repo}\tdue={due}\t{task.title}"
 
 
 @workflow_app.command("add")

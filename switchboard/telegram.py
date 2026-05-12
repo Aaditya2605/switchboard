@@ -70,7 +70,9 @@ def _format_tasks(service: SwitchboardService, status: str | None = None) -> str
     if not tasks:
         return "No tasks found."
     return "\n".join(
-        f"#{task.id} {task.status} {task.assigned_agent or 'unassigned'} — {task.title}" for task in tasks
+        f"#{task.id} {task.status} {task.assigned_agent or 'unassigned'} "
+        f"{task.priority} repo={task.repo or '-'} due={task.due_date or '-'} — {task.title}"
+        for task in tasks
     )
 
 
