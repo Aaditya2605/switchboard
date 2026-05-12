@@ -8,15 +8,18 @@ import typer
 from switchboard.db import AgentRepository, default_db_path, init_db
 from switchboard.scheduler import Scheduler
 from switchboard.service import SwitchboardService
+from switchboard.telegram import handle_telegram_command
 from switchboard.tmux import TmuxClient
 
 app = typer.Typer(help="Switchboard: command center for Claude Code and Codex agents.")
 task_app = typer.Typer(help="Shared Kanban task board.")
 workflow_app = typer.Typer(help="Reusable workflow and cron prompt dispatch.")
 scheduler_app = typer.Typer(help="Run due workflow prompts automatically.")
+telegram_app = typer.Typer(help="Telegram/Hermes text-command bridge.")
 app.add_typer(task_app, name="task")
 app.add_typer(workflow_app, name="workflow")
 app.add_typer(scheduler_app, name="scheduler")
+app.add_typer(telegram_app, name="telegram")
 
 
 def service() -> SwitchboardService:
@@ -217,6 +220,14 @@ def scheduler_daemon(interval: int = typer.Option(60, "--interval", "-i", help="
         if ran:
             typer.echo(f"Ran {len(ran)} workflow(s): {', '.join(workflow.name for workflow in ran)}")
         time.sleep(interval)
+
+
+@telegram_app.command("handle")
+def telegram_handle(text: str) -> None:
+    try:
+        typer.echo(handle_telegram_command(service(), text))
+    except (KeyError, ValueError) as exc:
+        fail(exc)
 
 
 if __name__ == "__main__":
