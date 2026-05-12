@@ -7,6 +7,7 @@ import typer
 
 from pathlib import Path
 
+from switchboard.dashboard import create_app
 from switchboard.db import AgentRepository, default_db_path, init_db, switchboard_home
 from switchboard.launchd import DEFAULT_LABEL, LaunchdInstaller
 from switchboard.scheduler import Scheduler
@@ -137,6 +138,16 @@ def health(name: str | None = typer.Argument(None), all: bool = typer.Option(Fal
         fail(exc)
     for agent in agents:
         typer.echo(f"{agent.name}\t{agent.kind}\t{agent.status}\t{agent.tmux_session}")
+
+
+@app.command()
+def dashboard(
+    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind."),
+    port: int = typer.Option(8765, "--port", help="Port to bind."),
+) -> None:
+    import uvicorn
+
+    uvicorn.run(create_app(service()), host=host, port=port)
 
 
 @task_app.command("add")
