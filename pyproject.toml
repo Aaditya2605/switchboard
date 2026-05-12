@@ -1,0 +1,12 @@
+[project]
+name = "switchboard"
+version = "0.1.0"
+description = "Persistent command center for Claude Code and Codex agents."
+requires-python = ">=3.11"
+dependencies = ["typer>=0.12"]
+
+[project.scripts]
+switchboard = "switchboard.cli:app"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
