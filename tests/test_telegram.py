@@ -1,4 +1,5 @@
 from datetime import datetime
+import subprocess
 
 from switchboard.db import AgentRepository, init_db
 from switchboard.service import SwitchboardService
@@ -12,6 +13,8 @@ class FakeRunner:
 
     def run(self, command):
         self.commands.append(command)
+        if "tmux has-session" in command:
+            raise subprocess.CalledProcessError(1, command)
         return ""
 
 
@@ -74,6 +77,15 @@ def test_telegram_scheduler_tick_runs_due_workflow(tmp_path):
     assert "Ran 1" in response
     assert "hourly" in response
     assert any("Workflow: hourly" in command for command in runner.commands)
+
+
+def test_telegram_health_checks_agent(tmp_path):
+    service, _ = make_service(tmp_path)
+
+    response = handle_telegram_command(service, "/health backend")
+
+    assert "backend" in response
+    assert "dead" in response
 
 
 def test_telegram_help_and_unknown_command(tmp_path):

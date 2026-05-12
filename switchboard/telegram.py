@@ -12,6 +12,7 @@ HELP_TEXT = """Switchboard commands:
 /tasks [status]
 /inbox AGENT
 /send AGENT PROMPT...
+/health AGENT|all
 /scheduler tick
 /help"""
 
@@ -43,6 +44,11 @@ def handle_telegram_command(service: SwitchboardService, text: str, now: datetim
         prompt = " ".join(parts[2:])
         service.send(agent, prompt)
         return f"Sent prompt to {agent}"
+    if command == "/health":
+        if len(parts) != 2:
+            return "Usage: /health AGENT|all"
+        agents = service.sync_health() if parts[1] == "all" else [service.health(parts[1])]
+        return "\n".join(f"{agent.name} — {agent.kind} — {agent.status}" for agent in agents)
     if command == "/scheduler":
         if len(parts) == 2 and parts[1] == "tick":
             ran = Scheduler(service).tick(now)

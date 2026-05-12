@@ -15,6 +15,7 @@ Switchboard Lite is the local MVP:
 - store and run reusable workflow prompts
 - run due workflow prompts with a scheduler daemon
 - handle Telegram-style commands through Hermes
+- detect dead/live tmux agent sessions
 
 ## Install/dev
 
@@ -31,6 +32,8 @@ uv run --with-editable . switchboard agents
 uv run --with-editable . switchboard spawn claude backend ~/projects/myapp
 uv run --with-editable . switchboard spawn codex reviewer ~/projects/myapp
 uv run --with-editable . switchboard send backend "Run tests and fix failures"
+uv run --with-editable . switchboard health backend
+uv run --with-editable . switchboard health --all
 uv run --with-editable . switchboard logs backend
 uv run --with-editable . switchboard stop backend
 ```
@@ -77,6 +80,7 @@ Telegram/Hermes bridge:
 uv run --with-editable . switchboard telegram handle "/agents"
 uv run --with-editable . switchboard telegram handle "/tasks completed"
 uv run --with-editable . switchboard telegram handle "/inbox backend"
+uv run --with-editable . switchboard telegram handle "/health all"
 uv run --with-editable . switchboard telegram handle "/send backend Run tests"
 uv run --with-editable . switchboard telegram handle "/scheduler tick"
 ```

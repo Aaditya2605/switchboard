@@ -39,6 +39,13 @@ class TmuxClient:
     def stop(self, session: str) -> None:
         self.runner.run(f"tmux kill-session -t {shlex.quote(session)}")
 
+    def exists(self, session: str) -> bool:
+        try:
+            self.runner.run(f"tmux has-session -t {shlex.quote(session)}")
+        except subprocess.CalledProcessError:
+            return False
+        return True
+
     @staticmethod
     def _agent_command(kind: str) -> str:
         if kind == "claude":

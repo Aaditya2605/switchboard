@@ -93,6 +93,14 @@ class SwitchboardService:
     def enable_workflow(self, name: str) -> WorkflowRecord:
         return self.agents.set_workflow_enabled(name, True)
 
+    def health(self, name: str) -> AgentRecord:
+        agent = self._require_agent(name)
+        status = "running" if self.tmux.exists(agent.tmux_session) else "dead"
+        return self.agents.update_status(name, status)
+
+    def sync_health(self) -> list[AgentRecord]:
+        return [self.health(agent.name) for agent in self.list_agents()]
+
     def _require_agent(self, name: str) -> AgentRecord:
         agent = self.agents.get(name)
         if agent is None:

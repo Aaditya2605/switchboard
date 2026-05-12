@@ -107,6 +107,17 @@ def stop(name: str) -> None:
     typer.echo(f"Stopped {agent.name}")
 
 
+@app.command()
+def health(name: str | None = typer.Argument(None), all: bool = typer.Option(False, "--all", help="Check all registered agents.")) -> None:
+    try:
+        svc = service()
+        agents = svc.sync_health() if all else [svc.health(name or "")]
+    except KeyError as exc:
+        fail(exc)
+    for agent in agents:
+        typer.echo(f"{agent.name}\t{agent.kind}\t{agent.status}\t{agent.tmux_session}")
+
+
 @task_app.command("add")
 def task_add(title: str, description: str = typer.Option("", "--description", "-d"), agent: str | None = typer.Option(None, "--agent", "-a")) -> None:
     try:
