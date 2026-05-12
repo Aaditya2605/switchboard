@@ -35,6 +35,8 @@ uv run --with-editable . switchboard send backend "Run tests and fix failures"
 uv run --with-editable . switchboard health backend
 uv run --with-editable . switchboard health --all
 uv run --with-editable . switchboard dashboard --host 127.0.0.1 --port 8765
+export SWITCHBOARD_DASHBOARD_TOKEN="choose-a-local-token"
+uv run --with-editable . switchboard dashboard --host 127.0.0.1 --port 8765 --require-token
 uv run --with-editable . switchboard logs backend
 uv run --with-editable . switchboard stop backend
 ```
@@ -106,6 +108,20 @@ Use `--dry-run` to register an agent without launching tmux:
 uv run --with-editable . switchboard spawn claude backend ~/projects/myapp --dry-run
 ```
 
+## Dashboard safety
+
+Set `SWITCHBOARD_DASHBOARD_TOKEN` to require `Authorization: Bearer ...` on dashboard and API requests.
+Mutating API actions also require `"confirm": true` in the JSON body.
+
+Example:
+
+```bash
+curl -H "Authorization: Bearer $SWITCHBOARD_DASHBOARD_TOKEN" http://127.0.0.1:8765/api/agents
+curl -X POST -H "Authorization: Bearer $SWITCHBOARD_DASHBOARD_TOKEN" -H "Content-Type: application/json" \
+  -d '{"agent":"backend","prompt":"Run tests","confirm":true}' \
+  http://127.0.0.1:8765/api/send
+```
+
 ## Data
 
 Default DB:
@@ -122,4 +138,5 @@ SWITCHBOARD_HOME=/tmp/switchboard-test uv run --with-editable . switchboard init
 
 ## Roadmap
 
-- FastAPI + dashboard
+- Dashboard UI improvements
+- systemd installer for non-macOS

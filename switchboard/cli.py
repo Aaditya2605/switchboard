@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime
+from pathlib import Path
 
 import typer
-
-from pathlib import Path
+import uvicorn
 
 from switchboard.dashboard import create_app
 from switchboard.db import AgentRepository, default_db_path, init_db, switchboard_home
@@ -144,10 +145,12 @@ def health(name: str | None = typer.Argument(None), all: bool = typer.Option(Fal
 def dashboard(
     host: str = typer.Option("127.0.0.1", "--host", help="Host to bind."),
     port: int = typer.Option(8765, "--port", help="Port to bind."),
+    require_token: bool = typer.Option(False, "--require-token", help="Fail unless SWITCHBOARD_DASHBOARD_TOKEN is set."),
 ) -> None:
-    import uvicorn
-
-    uvicorn.run(create_app(service()), host=host, port=port)
+    auth_token = os.environ.get("SWITCHBOARD_DASHBOARD_TOKEN")
+    if require_token and not auth_token:
+        fail(ValueError("SWITCHBOARD_DASHBOARD_TOKEN is required"))
+    uvicorn.run(create_app(service(), auth_token=auth_token), host=host, port=port)
 
 
 @task_app.command("add")
