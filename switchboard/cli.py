@@ -5,7 +5,10 @@ from datetime import datetime
 
 import typer
 
-from switchboard.db import AgentRepository, default_db_path, init_db
+from pathlib import Path
+
+from switchboard.db import AgentRepository, default_db_path, init_db, switchboard_home
+from switchboard.launchd import DEFAULT_LABEL, LaunchdInstaller
 from switchboard.scheduler import Scheduler
 from switchboard.service import SwitchboardService
 from switchboard.telegram import handle_telegram_command
@@ -25,6 +28,19 @@ app.add_typer(telegram_app, name="telegram")
 def service() -> SwitchboardService:
     init_db(default_db_path())
     return SwitchboardService(AgentRepository(default_db_path()), TmuxClient())
+
+
+def launch_agents_dir() -> Path:
+    return Path.home() / "Library" / "LaunchAgents"
+
+
+def launchd_installer(label: str = DEFAULT_LABEL) -> LaunchdInstaller:
+    return LaunchdInstaller(
+        repo_path=Path.cwd(),
+        home=switchboard_home(),
+        launch_agents_dir=launch_agents_dir(),
+        label=label,
+    )
 
 
 def fail(exc: Exception) -> None:
@@ -286,6 +302,39 @@ def scheduler_daemon(interval: int = typer.Option(60, "--interval", "-i", help="
         if ran:
             typer.echo(f"Ran {len(ran)} workflow(s): {', '.join(workflow.name for workflow in ran)}")
         time.sleep(interval)
+
+
+@scheduler_app.command("install-launchd")
+def scheduler_install_launchd(
+    interval: int = typer.Option(60, "--interval", "-i", help="Seconds between scheduler ticks."),
+    label: str = typer.Option(DEFAULT_LABEL, "--label", help="LaunchAgent label."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Write plist but do not call launchctl."),
+) -> None:
+    try:
+        result = launchd_installer(label).install(interval=interval, dry_run=dry_run)
+    except ValueError as exc:
+        fail(exc)
+    typer.echo(f"{result.action}: {result.plist_path}")
+    for command in result.commands:
+        typer.echo(command)
+
+
+@scheduler_app.command("uninstall-launchd")
+def scheduler_uninstall_launchd(
+    label: str = typer.Option(DEFAULT_LABEL, "--label", help="LaunchAgent label."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Plan removal but do not call launchctl or delete plist."),
+) -> None:
+    result = launchd_installer(label).uninstall(dry_run=dry_run)
+    typer.echo(f"{result.action}: {result.plist_path}")
+    for command in result.commands:
+        typer.echo(command)
+
+
+@scheduler_app.command("launchd-status")
+def scheduler_launchd_status(label: str = typer.Option(DEFAULT_LABEL, "--label", help="LaunchAgent label.")) -> None:
+    status = launchd_installer(label).status()
+    state = "installed" if status.installed else "not installed"
+    typer.echo(f"{status.label}: {state} ({status.plist_path})")
 
 
 @telegram_app.command("handle")

@@ -75,6 +75,10 @@ Scheduler:
 ```bash
 uv run --with-editable . switchboard scheduler tick
 uv run --with-editable . switchboard scheduler daemon --interval 60
+uv run --with-editable . switchboard scheduler install-launchd --interval 60 --dry-run
+uv run --with-editable . switchboard scheduler install-launchd --interval 60
+uv run --with-editable . switchboard scheduler launchd-status
+uv run --with-editable . switchboard scheduler uninstall-launchd --dry-run
 ```
 
 Telegram/Hermes bridge:
@@ -111,5 +115,4 @@ SWITCHBOARD_HOME=/tmp/switchboard-test uv run --with-editable . switchboard init
 ## Roadmap
 
 - dedicated Telegram bot/webhook auth
-- launchd/systemd installer for scheduler daemon
 - FastAPI + dashboard
