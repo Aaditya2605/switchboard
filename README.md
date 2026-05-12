@@ -30,6 +30,25 @@ uv run --with-editable . switchboard logs backend
 uv run --with-editable . switchboard stop backend
 ```
 
+Agent-to-agent comms:
+
+```bash
+uv run --with-editable . switchboard msg reviewer backend "Need the API schema"
+uv run --with-editable . switchboard inbox backend
+uv run --with-editable . switchboard msg reviewer backend "Need the API schema" --deliver
+```
+
+Shared task board:
+
+```bash
+uv run --with-editable . switchboard task add "Fix auth" --description "Run tests first" --agent backend
+uv run --with-editable . switchboard task list
+uv run --with-editable . switchboard task assign 1 reviewer
+uv run --with-editable . switchboard task move 1 in_progress
+uv run --with-editable . switchboard task move 1 completed
+uv run --with-editable . switchboard task list --status completed
+```
+
 Use `--dry-run` to register an agent without launching tmux:
 
 ```bash

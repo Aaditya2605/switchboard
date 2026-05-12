@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from switchboard.db import AgentRecord, AgentRepository
+from switchboard.db import AgentRecord, AgentRepository, MessageRecord, TaskRecord
 from switchboard.tmux import TmuxClient
 
 
@@ -36,6 +36,35 @@ class SwitchboardService:
         agent = self._require_agent(name)
         self.tmux.stop(agent.tmux_session)
         return self.agents.update_status(name, "stopped")
+
+    def message(self, from_agent: str, to_agent: str, body: str, deliver: bool = False) -> MessageRecord:
+        self._require_agent(from_agent)
+        recipient = self._require_agent(to_agent)
+        message = self.agents.create_message(from_agent, to_agent, body)
+        if deliver:
+            formatted = f"Message from {from_agent}:\n{body}"
+            self.tmux.send(recipient.tmux_session, formatted)
+            message = self.agents.mark_delivered(message.id)
+        return message
+
+    def inbox(self, agent_name: str) -> list[MessageRecord]:
+        self._require_agent(agent_name)
+        return self.agents.inbox(agent_name)
+
+    def create_task(self, title: str, description: str = "", assigned_agent: str | None = None) -> TaskRecord:
+        if assigned_agent:
+            self._require_agent(assigned_agent)
+        return self.agents.create_task(title, description, assigned_agent)
+
+    def list_tasks(self, status: str | None = None) -> list[TaskRecord]:
+        return self.agents.list_tasks(status=status)
+
+    def assign_task(self, task_id: int, agent_name: str) -> TaskRecord:
+        self._require_agent(agent_name)
+        return self.agents.assign_task(task_id, agent_name)
+
+    def move_task(self, task_id: int, status: str) -> TaskRecord:
+        return self.agents.move_task(task_id, status)
 
     def _require_agent(self, name: str) -> AgentRecord:
         agent = self.agents.get(name)
