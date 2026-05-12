@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from switchboard.db import AgentRecord, AgentRepository, MessageRecord, TaskRecord
+from switchboard.db import AgentRecord, AgentRepository, MessageRecord, TaskRecord, WorkflowRecord
 from switchboard.tmux import TmuxClient
 
 
@@ -65,6 +65,33 @@ class SwitchboardService:
 
     def move_task(self, task_id: int, status: str) -> TaskRecord:
         return self.agents.move_task(task_id, status)
+
+    def create_workflow(self, name: str, agent_name: str, prompt: str, cron: str) -> WorkflowRecord:
+        self._require_agent(agent_name)
+        if len(cron.split()) != 5:
+            raise ValueError("cron must be a five-field expression")
+        return self.agents.create_workflow(name=name, agent_name=agent_name, prompt=prompt, cron=cron)
+
+    def list_workflows(self) -> list[WorkflowRecord]:
+        return self.agents.list_workflows()
+
+    def run_workflow(self, name: str) -> WorkflowRecord:
+        workflow = self.agents.get_workflow(name)
+        if workflow is None:
+            raise KeyError(f"Unknown workflow: {name}")
+        if not workflow.enabled:
+            raise ValueError(f"Workflow is disabled: {name}")
+        agent = self._require_agent(workflow.agent_name)
+        formatted = f"Workflow: {workflow.name}\nSchedule: {workflow.cron}\n\n{workflow.prompt}"
+        self.tmux.send(agent.tmux_session, formatted)
+        self.agents.record_message(agent.name, formatted, "workflow")
+        return self.agents.mark_workflow_run(name)
+
+    def disable_workflow(self, name: str) -> WorkflowRecord:
+        return self.agents.set_workflow_enabled(name, False)
+
+    def enable_workflow(self, name: str) -> WorkflowRecord:
+        return self.agents.set_workflow_enabled(name, True)
 
     def _require_agent(self, name: str) -> AgentRecord:
         agent = self.agents.get(name)

@@ -10,6 +10,9 @@ Switchboard Lite is the local MVP:
 - capture logs
 - stop agents
 - store agent state in SQLite
+- queue agent-to-agent messages
+- manage shared tasks
+- store and run reusable workflow prompts
 
 ## Install/dev
 
@@ -49,6 +52,16 @@ uv run --with-editable . switchboard task move 1 completed
 uv run --with-editable . switchboard task list --status completed
 ```
 
+Workflow prompts:
+
+```bash
+uv run --with-editable . switchboard workflow add daily-check --agent backend --prompt "Review open tasks and suggest next action" --cron "0 9 * * *"
+uv run --with-editable . switchboard workflow list
+uv run --with-editable . switchboard workflow run daily-check
+uv run --with-editable . switchboard workflow disable daily-check
+uv run --with-editable . switchboard workflow enable daily-check
+```
+
 Use `--dry-run` to register an agent without launching tmux:
 
 ```bash
@@ -71,8 +84,6 @@ SWITCHBOARD_HOME=/tmp/switchboard-test uv run --with-editable . switchboard init
 
 ## Roadmap
 
-- shared Kanban tasks
-- agent-to-agent comms inbox
-- cron/workflow prompts
 - Telegram control
+- real cron scheduler daemon
 - FastAPI + dashboard

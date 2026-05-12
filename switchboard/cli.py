@@ -8,7 +8,9 @@ from switchboard.tmux import TmuxClient
 
 app = typer.Typer(help="Switchboard: command center for Claude Code and Codex agents.")
 task_app = typer.Typer(help="Shared Kanban task board.")
+workflow_app = typer.Typer(help="Reusable workflow and cron prompt dispatch.")
 app.add_typer(task_app, name="task")
+app.add_typer(workflow_app, name="workflow")
 
 
 def service() -> SwitchboardService:
@@ -133,6 +135,58 @@ def task_move(task_id: int, status: str) -> None:
     except (KeyError, ValueError) as exc:
         fail(exc)
     typer.echo(f"Moved task #{task.id} to {task.status}")
+
+
+@workflow_app.command("add")
+def workflow_add(
+    name: str,
+    agent: str = typer.Option(..., "--agent", "-a"),
+    prompt: str = typer.Option(..., "--prompt", "-p"),
+    cron: str = typer.Option(..., "--cron", "-c"),
+) -> None:
+    try:
+        workflow = service().create_workflow(name, agent_name=agent, prompt=prompt, cron=cron)
+    except (KeyError, ValueError) as exc:
+        fail(exc)
+    typer.echo(f"Created workflow #{workflow.id}: {workflow.name} -> {workflow.agent_name} [{workflow.cron}]")
+
+
+@workflow_app.command("list")
+def workflow_list() -> None:
+    workflows = service().list_workflows()
+    if not workflows:
+        typer.echo("No workflows found.")
+        return
+    for workflow in workflows:
+        state = "enabled" if workflow.enabled else "disabled"
+        typer.echo(f"#{workflow.id}\t{state}\t{workflow.name}\t{workflow.agent_name}\t{workflow.cron}")
+
+
+@workflow_app.command("run")
+def workflow_run(name: str) -> None:
+    try:
+        workflow = service().run_workflow(name)
+    except (KeyError, ValueError) as exc:
+        fail(exc)
+    typer.echo(f"Ran workflow {workflow.name} -> {workflow.agent_name}")
+
+
+@workflow_app.command("disable")
+def workflow_disable(name: str) -> None:
+    try:
+        workflow = service().disable_workflow(name)
+    except KeyError as exc:
+        fail(exc)
+    typer.echo(f"Workflow {workflow.name} disabled")
+
+
+@workflow_app.command("enable")
+def workflow_enable(name: str) -> None:
+    try:
+        workflow = service().enable_workflow(name)
+    except KeyError as exc:
+        fail(exc)
+    typer.echo(f"Workflow {workflow.name} enabled")
 
 
 if __name__ == "__main__":
