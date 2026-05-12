@@ -75,7 +75,7 @@ class SwitchboardService:
     def list_workflows(self) -> list[WorkflowRecord]:
         return self.agents.list_workflows()
 
-    def run_workflow(self, name: str) -> WorkflowRecord:
+    def run_workflow(self, name: str, ran_at: str | None = None) -> WorkflowRecord:
         workflow = self.agents.get_workflow(name)
         if workflow is None:
             raise KeyError(f"Unknown workflow: {name}")
@@ -85,7 +85,7 @@ class SwitchboardService:
         formatted = f"Workflow: {workflow.name}\nSchedule: {workflow.cron}\n\n{workflow.prompt}"
         self.tmux.send(agent.tmux_session, formatted)
         self.agents.record_message(agent.name, formatted, "workflow")
-        return self.agents.mark_workflow_run(name)
+        return self.agents.mark_workflow_run(name, ran_at=ran_at)
 
     def disable_workflow(self, name: str) -> WorkflowRecord:
         return self.agents.set_workflow_enabled(name, False)

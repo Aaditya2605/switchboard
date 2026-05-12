@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import time
+from datetime import datetime
+
 import typer
 
 from switchboard.db import AgentRepository, default_db_path, init_db
+from switchboard.scheduler import Scheduler
 from switchboard.service import SwitchboardService
 from switchboard.tmux import TmuxClient
 
 app = typer.Typer(help="Switchboard: command center for Claude Code and Codex agents.")
 task_app = typer.Typer(help="Shared Kanban task board.")
 workflow_app = typer.Typer(help="Reusable workflow and cron prompt dispatch.")
+scheduler_app = typer.Typer(help="Run due workflow prompts automatically.")
 app.add_typer(task_app, name="task")
 app.add_typer(workflow_app, name="workflow")
+app.add_typer(scheduler_app, name="scheduler")
 
 
 def service() -> SwitchboardService:
@@ -187,6 +193,30 @@ def workflow_enable(name: str) -> None:
     except KeyError as exc:
         fail(exc)
     typer.echo(f"Workflow {workflow.name} enabled")
+
+
+@scheduler_app.command("tick")
+def scheduler_tick(now: str | None = typer.Option(None, "--now", help="ISO timestamp override for testing.")) -> None:
+    try:
+        dt = datetime.fromisoformat(now) if now else None
+        ran = Scheduler(service()).tick(dt)
+    except (KeyError, ValueError) as exc:
+        fail(exc)
+    names = ", ".join(workflow.name for workflow in ran) or "none"
+    typer.echo(f"Ran {len(ran)} workflow(s): {names}")
+
+
+@scheduler_app.command("daemon")
+def scheduler_daemon(interval: int = typer.Option(60, "--interval", "-i", help="Seconds between scheduler ticks.")) -> None:
+    if interval <= 0:
+        raise typer.BadParameter("interval must be positive")
+    typer.echo(f"Starting Switchboard scheduler daemon; interval={interval}s")
+    scheduler = Scheduler(service())
+    while True:
+        ran = scheduler.tick()
+        if ran:
+            typer.echo(f"Ran {len(ran)} workflow(s): {', '.join(workflow.name for workflow in ran)}")
+        time.sleep(interval)
 
 
 if __name__ == "__main__":

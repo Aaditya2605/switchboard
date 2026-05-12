@@ -366,12 +366,18 @@ class AgentRepository:
             )
         return self._require_workflow(name)
 
-    def mark_workflow_run(self, name: str) -> WorkflowRecord:
+    def mark_workflow_run(self, name: str, ran_at: str | None = None) -> WorkflowRecord:
         with connect(self.db_path) as conn:
-            conn.execute(
-                "UPDATE workflows SET last_run_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
-                (name,),
-            )
+            if ran_at is None:
+                conn.execute(
+                    "UPDATE workflows SET last_run_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
+                    (name,),
+                )
+            else:
+                conn.execute(
+                    "UPDATE workflows SET last_run_at = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
+                    (ran_at, name),
+                )
         return self._require_workflow(name)
 
     def _require_workflow(self, name: str) -> WorkflowRecord:

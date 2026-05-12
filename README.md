@@ -13,6 +13,7 @@ Switchboard Lite is the local MVP:
 - queue agent-to-agent messages
 - manage shared tasks
 - store and run reusable workflow prompts
+- run due workflow prompts with a scheduler daemon
 
 ## Install/dev
 
@@ -62,6 +63,13 @@ uv run --with-editable . switchboard workflow disable daily-check
 uv run --with-editable . switchboard workflow enable daily-check
 ```
 
+Scheduler:
+
+```bash
+uv run --with-editable . switchboard scheduler tick
+uv run --with-editable . switchboard scheduler daemon --interval 60
+```
+
 Use `--dry-run` to register an agent without launching tmux:
 
 ```bash
@@ -85,5 +93,5 @@ SWITCHBOARD_HOME=/tmp/switchboard-test uv run --with-editable . switchboard init
 ## Roadmap
 
 - Telegram control
-- real cron scheduler daemon
+- launchd/systemd installer for scheduler daemon
 - FastAPI + dashboard
