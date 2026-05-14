@@ -131,6 +131,16 @@ Behind the scenes Switchboard resolves the agent's kind to its `one_shot` argv p
 
 A real end-to-end run driving Claude *and* Codex from the same task board lives in [`docs/DOGFOOD.md`](docs/DOGFOOD.md).
 
+### Parallel dispatch
+
+```bash
+uv run --with-editable . switchboard run-batch 1 2 3                       # specific IDs
+uv run --with-editable . switchboard run-batch --status assigned --max 4   # everything still in the queue
+uv run --with-editable . switchboard run-batch --status assigned --complete --max 3
+```
+
+`run-batch` dispatches multiple tasks concurrently (default `--max 3`), with per-task pass/fail so a single bad task can't tank the rest. Output is one line per task plus a summary count.
+
 ## Agent-to-agent comms
 
 ```bash

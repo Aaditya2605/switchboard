@@ -9,6 +9,8 @@ All notable changes to Switchboard follow this file. Format roughly follows [Kee
 - `switchboard spawn --worktree` puts each agent in its own `git worktree` rooted at `$SWITCHBOARD_HOME/worktrees/<name>` on a `switchboard/<name>` branch. New `switchboard worktree list` / `prune --confirm` commands.
 - Pluggable agent-kind registry. Built-in: `claude`, `codex`, `aider`, `shell`. Extend via `~/.switchboard/agent_kinds.toml` or a `switchboard.agent_kinds` entry point group. `switchboard kinds` lists them.
 - `switchboard run <task-id>` dispatches a task to its assigned agent's non-interactive CLI (`claude -p`, `codex exec`, ...), captures the response as a task comment, and optionally marks the task done.
+- `switchboard run-batch [ids...] [--status STATUS] [--max N]` parallel dispatch via thread pool with per-task pass/fail.
+- Per-task detail page in the dashboard (`/tasks/<id>`) shows description, status moves, and the full comment thread (which is where `switchboard run` captures each agent's response).
 - Linux systemd user-unit installer for the scheduler (`scheduler install-systemd`, `uninstall-systemd`, `systemd-status`).
 - Opt-in dashboard live mode — toggle in the sidebar, polls `/api/summary` every 10s and reloads only on state change. State persists per-browser via localStorage.
 - Multi-page dashboard: every nav item is a dedicated route (`/agents`, `/tasks`, `/workflows`, …). Sidebar highlights the active page. A new `/search` page filters across agents, tasks, and workflows server-side.
