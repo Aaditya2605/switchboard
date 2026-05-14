@@ -28,27 +28,25 @@ def make_client(tmp_path, token=None):
     return TestClient(app), runner
 
 
-def test_dashboard_home_shows_switchboard_sections(tmp_path):
+def test_overview_page_shows_brand_and_summary(tmp_path):
     client, _ = make_client(tmp_path)
 
     response = client.get("/")
 
     assert response.status_code == 200
     assert "Switchboard" in response.text
-    assert "Agents" in response.text
-    assert "Tasks" in response.text
-    assert "Workflows" in response.text
-    assert "backend" in response.text
-    assert "Fix auth" in response.text
+    assert "Recent activity" in response.text
+    # nav-driven cross-page links rendered on overview
+    assert "Agents →" in response.text
+    assert "Tasks →" in response.text
+    assert "Workflows →" in response.text
 
 
-def test_dashboard_has_control_plane_navigation_and_actions(tmp_path):
+def test_sidebar_navigation_links_render_on_every_page(tmp_path):
     client, _ = make_client(tmp_path)
-
-    response = client.get("/")
-
-    assert response.status_code == 200
-    for label in [
+    paths = ["/", "/agents", "/tasks", "/activity", "/comms", "/approvals", "/workflows", "/logs", "/search", "/strategy", "/analytics", "/knowledge", "/experiments", "/skills"]
+    nav_labels = [
+        "Search",
         "Overview",
         "Agents",
         "Tasks",
@@ -56,30 +54,105 @@ def test_dashboard_has_control_plane_navigation_and_actions(tmp_path):
         "Comms",
         "Approvals",
         "Workflows",
+        "Logs",
         "Strategy",
         "Analytics",
         "Knowledge Base",
         "Experiments",
         "Skills",
-        "Manage Crons",
-        "Logs",
-        "Create workflow",
-    ]:
-        assert label in response.text
-    assert "data-endpoint=\"/api/send\"" in response.text
+    ]
+
+    for path in paths:
+        response = client.get(path)
+        assert response.status_code == 200, f"{path} returned {response.status_code}"
+        for label in nav_labels:
+            assert label in response.text, f"nav label {label!r} missing from {path}"
+
+
+def test_active_nav_state_reflects_current_page(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.get("/workflows")
+    assert response.status_code == 200
+    assert "class='nav-item active' href='/workflows'" in response.text
+    # Other items should NOT be marked active on the workflows page
+    assert "class='nav-item active' href='/agents'" not in response.text
+
+
+def test_agents_page_shows_agents(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.get("/agents")
+
+    assert response.status_code == 200
+    assert "backend" in response.text
+    assert "reviewer" in response.text
+    assert "Active agents" in response.text
+
+
+def test_tasks_page_shows_tasks(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.get("/tasks")
+
+    assert response.status_code == 200
+    assert "Fix auth" in response.text
+    assert "moveTask(" in response.text
+
+
+def test_workflows_page_has_creation_form_and_actions(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.get("/workflows")
+
+    assert response.status_code == 200
+    assert "Manage Crons" in response.text
+    assert "Create workflow" in response.text
     assert "data-endpoint=\"/api/workflows\"" in response.text
     assert "data-confirm=\"true\"" in response.text
     assert "runWorkflow(" in response.text
-    assert "moveTask(" in response.text
+
+
+def test_comms_page_has_send_form(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.get("/comms")
+
+    assert response.status_code == 200
+    assert "data-endpoint=\"/api/send\"" in response.text
+    assert "data-confirm=\"true\"" in response.text
+
+
+def test_logs_page_has_log_viewer(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.get("/logs")
+
+    assert response.status_code == 200
     assert "loadLogs(" in response.text
+    assert "log-output" in response.text
 
 
-def test_dashboard_escapes_user_controlled_content(tmp_path):
+def test_search_page_returns_results_for_query(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    empty = client.get("/search")
+    assert empty.status_code == 200
+    assert "Type to search" in empty.text
+
+    response = client.get("/search?q=backend")
+    assert response.status_code == 200
+    assert "backend" in response.text
+    # Match the agent and the workflow that uses backend
+    assert "daily" in response.text
+
+
+def test_tasks_page_escapes_user_controlled_content(tmp_path):
     client, _ = make_client(tmp_path)
     service = client.app.state.switchboard_service
     service.create_task("<script>alert('x')</script>", assigned_agent="backend")
 
-    response = client.get("/")
+    response = client.get("/tasks")
 
     assert "<script>alert('x')</script>" not in response.text
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in response.text
@@ -158,11 +231,16 @@ def test_dashboard_requires_bearer_token_when_configured(tmp_path):
     client, _ = make_client(tmp_path, token="secret-token")
 
     assert client.get("/").status_code == 401
+    assert client.get("/workflows").status_code == 401
     assert client.get("/api/agents", headers={"Authorization": "Bearer wrong"}).status_code == 401
 
     response = client.get("/api/agents", headers={"Authorization": "Bearer secret-token"})
     assert response.status_code == 200
     assert response.json()[0]["name"] == "backend"
+
+    page = client.get("/agents", headers={"Authorization": "Bearer secret-token"})
+    assert page.status_code == 200
+    assert "backend" in page.text
 
 
 def test_mutating_dashboard_actions_require_confirmation(tmp_path):
