@@ -123,3 +123,41 @@ def test_run_task_does_not_re_move_when_already_in_progress(tmp_path):
 
     task_after, _ = service.run_task(task.id)
     assert task_after.status == "in_progress"
+
+
+def test_run_tasks_in_parallel_dispatches_all_and_returns_per_task_status(tmp_path):
+    runner = FakeOneShot(OneShotResult(stdout="hi", returncode=0))
+    service = make_service(tmp_path, runner=runner)
+    service.spawn("claude", "builder", "/tmp/project", dry_run=True)
+    ids = []
+    for n in range(4):
+        task = service.create_task(f"Task {n}", assigned_agent="builder")
+        ids.append(task.id)
+
+    results = service.run_tasks_in_parallel(ids, timeout=30, max_workers=2)
+
+    assert [r.task_id for r in results] == ids
+    assert all(r.ok for r in results)
+    assert all(r.status == "in_progress" for r in results)
+    assert len(runner.calls) == 4
+
+
+def test_run_tasks_in_parallel_isolates_failures(tmp_path):
+    runner = FakeOneShot()
+    service = make_service(tmp_path, runner=runner)
+    service.spawn("claude", "builder", "/tmp/project", dry_run=True)
+    good = service.create_task("Good", assigned_agent="builder")
+    orphan = service.create_task("Orphan")  # no assignee
+
+    results = service.run_tasks_in_parallel([good.id, orphan.id], timeout=30, max_workers=2)
+    by_id = {r.task_id: r for r in results}
+
+    assert by_id[good.id].ok is True
+    assert by_id[orphan.id].ok is False
+    assert "no assigned agent" in by_id[orphan.id].message.lower()
+
+
+def test_run_tasks_in_parallel_rejects_invalid_max_workers(tmp_path):
+    service = make_service(tmp_path)
+    with pytest.raises(ValueError):
+        service.run_tasks_in_parallel([1], max_workers=0)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Callable, Sequence
@@ -31,6 +33,16 @@ class OneShotResult:
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
+
+
+@dataclass(frozen=True)
+class BatchRunResult:
+    task_id: int
+    ok: bool
+    status: str
+    agent: str
+    comment_id: int | None
+    message: str
 
 
 def _default_one_shot_runner(args: Sequence[str], cwd: str, timeout: int) -> OneShotResult:
@@ -240,6 +252,55 @@ class SwitchboardService:
         task = self.agents.get_task(task_id)
         assert task is not None
         return task, comment
+
+    def run_tasks_in_parallel(
+        self,
+        task_ids: Sequence[int],
+        timeout: int = 600,
+        mark_completed: bool = False,
+        max_workers: int = 3,
+    ) -> list["BatchRunResult"]:
+        """Dispatch many tasks concurrently to their respective agents.
+
+        Uses a thread pool — each ``run_task`` call blocks inside a subprocess,
+        so threads are the right unit of parallelism. Results come back in
+        submission order, with per-task success/error so a single bad task
+        can't tank the batch.
+        """
+
+        if max_workers < 1:
+            raise ValueError("max_workers must be >= 1")
+        results: dict[int, BatchRunResult] = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            future_to_id = {
+                pool.submit(self._safe_run_task, task_id, timeout, mark_completed): task_id
+                for task_id in task_ids
+            }
+            for future in as_completed(future_to_id):
+                task_id = future_to_id[future]
+                results[task_id] = future.result()
+        return [results[tid] for tid in task_ids]
+
+    def _safe_run_task(self, task_id: int, timeout: int, mark_completed: bool) -> "BatchRunResult":
+        try:
+            task, comment = self.run_task(task_id, timeout=timeout, mark_completed=mark_completed)
+            return BatchRunResult(
+                task_id=task_id,
+                ok=True,
+                status=task.status,
+                agent=comment.author,
+                comment_id=comment.id,
+                message=f"comment #{comment.id} by {comment.author}",
+            )
+        except Exception as exc:  # noqa: BLE001 - one task's failure should not kill the batch
+            return BatchRunResult(
+                task_id=task_id,
+                ok=False,
+                status="error",
+                agent="",
+                comment_id=None,
+                message=str(exc),
+            )
 
     @staticmethod
     def _task_prompt(task: TaskRecord) -> str:

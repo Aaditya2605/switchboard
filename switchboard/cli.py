@@ -149,6 +149,31 @@ def run(
     typer.echo(f"Task #{task.id} ({task.status}) ran via {comment.author}; comment #{comment.id} captured.")
 
 
+@app.command("run-batch")
+def run_batch(
+    task_ids: list[int] = typer.Argument(None, help="Task IDs to dispatch in parallel."),
+    status: str | None = typer.Option(None, "--status", help="Pick all tasks in this status instead of listing IDs."),
+    max_workers: int = typer.Option(3, "--max", "-m", help="Maximum concurrent dispatches."),
+    timeout: int = typer.Option(600, "--timeout", help="Per-task subprocess timeout in seconds."),
+    complete: bool = typer.Option(False, "--complete", help="Mark each task completed on a clean exit."),
+) -> None:
+    """Dispatch multiple tasks in parallel to their assigned agents."""
+
+    svc = service()
+    if status:
+        selected = [task.id for task in svc.list_tasks(status=status)]
+    else:
+        selected = list(task_ids or [])
+    if not selected:
+        fail(ValueError("no tasks selected — pass task IDs or --status"))
+    results = svc.run_tasks_in_parallel(selected, timeout=timeout, mark_completed=complete, max_workers=max_workers)
+    ok = sum(1 for r in results if r.ok)
+    for result in results:
+        flag = "✓" if result.ok else "✗"
+        typer.echo(f"{flag} #{result.task_id}\t{result.status}\t{result.message}")
+    typer.echo(f"\n{ok}/{len(results)} tasks succeeded.")
+
+
 @app.command()
 def send(name: str, prompt: str) -> None:
     try:
