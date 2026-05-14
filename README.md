@@ -8,19 +8,15 @@ It is built for developers who want multiple agents working on the same repo wit
 
 ## What it does
 
-- register Claude/Codex agents
-- start persistent tmux sessions
-- send prompts into agents
-- capture logs
-- stop agents
-- store agent state in SQLite
-- queue agent-to-agent messages
-- manage shared tasks with priority, repo, due dates, and comments
-- store and run reusable workflow prompts
-- install built-in workflow presets for review/fix/build/audit loops
-- run due workflow prompts with a scheduler daemon
-- handle Telegram-style commands through Hermes or a real Telegram bot
-- polished multi-page web dashboard with a dedicated route for every nav item: Overview, Search, Agents, Tasks, Activity, Comms, Approvals, Workflows, Logs, Strategy, Analytics, Knowledge Base, Experiments, Skills
+- register agents of any kind (Claude Code, Codex, Aider, plain shell, or your own — see [Agent kinds](#agent-kinds))
+- spawn each agent in its own **isolated git worktree** so parallel agents don't clobber each other
+- start persistent tmux sessions per agent and capture their scrollback
+- send prompts into running agents, queue inter-agent messages, manage a shared task board
+- **`switchboard run <task-id>`** — dispatch a task to its assigned agent's non-interactive CLI (`claude -p`, `codex exec`, …) and capture the response as a task comment
+- store reusable workflow prompts, install five built-in presets (`daily-triage`, `code-review`, `bugfix-loop`, `feature-build`, `launch-audit`), run them on a cron schedule
+- run the scheduler under **launchd** (macOS) or **systemd** (Linux) with one command
+- handle Telegram-style commands via Hermes or a real Telegram bot
+- polished multi-page web dashboard with a dedicated route per nav item: Overview, Search, Agents, Tasks, Activity, Comms, Approvals, Workflows, Logs, Strategy, Analytics, Knowledge Base, Experiments, Skills — plus a one-click **Live mode** that auto-reloads on state change
 
 ## Install/dev
 
@@ -76,6 +72,62 @@ Use `--dry-run` to register an agent without launching tmux:
 ```bash
 uv run --with-editable . switchboard spawn claude backend ~/projects/myapp --dry-run
 ```
+
+## Per-agent git worktrees
+
+When multiple agents work on the same repo, give each one its own `git worktree` so their edits don't collide:
+
+```bash
+uv run --with-editable . switchboard spawn claude builder ~/projects/myapp --worktree
+uv run --with-editable . switchboard spawn codex reviewer ~/projects/myapp --worktree --branch reviewer/wip
+uv run --with-editable . switchboard worktree list
+uv run --with-editable . switchboard worktree prune builder --confirm
+```
+
+The worktree lives at `$SWITCHBOARD_HOME/worktrees/<agent>` by default (override with `--worktree-root`) on a branch named `switchboard/<agent>` (override with `--branch`).
+
+## Agent kinds
+
+`switchboard kinds` lists the agent CLIs Switchboard knows how to launch. Out of the box: `claude`, `codex`, `aider`, and a plain interactive `shell`. Add more in two ways:
+
+**One-off local kinds.** Drop a TOML file at `~/.switchboard/agent_kinds.toml`:
+
+```toml
+[plandex]
+command = "plandex"
+description = "Plandex AI engineer"
+
+[my-claude-resume]
+command = "claude --resume"
+description = "Resume the most recent Claude conversation"
+one_shot = ["claude", "-p", "--resume"]
+```
+
+**Shareable plugins.** Publish a Python package with an entry point:
+
+```toml
+[project.entry-points."switchboard.agent_kinds"]
+gemini = "my_pkg.agents:gemini_kind"
+```
+
+```python
+# my_pkg/agents.py
+from switchboard.agent_kinds import AgentKind
+gemini_kind = AgentKind(name="gemini", command="gemini", one_shot=("gemini", "-p"))
+```
+
+## Autonomous task dispatch
+
+`switchboard run` sends a task's title + description (and optional repo) into its assigned agent's non-interactive CLI and stores the response as a task comment:
+
+```bash
+uv run --with-editable . switchboard task add "Audit the dashboard for accessibility issues" --agent reviewer
+uv run --with-editable . switchboard run 1
+uv run --with-editable . switchboard run 1 --complete   # mark done on a clean exit
+uv run --with-editable . switchboard task comments 1
+```
+
+Behind the scenes Switchboard resolves the agent's kind to its `one_shot` argv prefix (`claude -p`, `codex exec`, ...) and shells out from the agent's workdir. Pair it with `--worktree` for isolated multi-agent runs against the same repo.
 
 ## Agent-to-agent comms
 
@@ -133,14 +185,32 @@ uv run --with-editable . switchboard workflow enable daily-check
 
 ## Scheduler
 
+Run due workflows once, run them in a loop, or install the loop as a system service.
+
 ```bash
 uv run --with-editable . switchboard scheduler tick
 uv run --with-editable . switchboard scheduler daemon --interval 60
+```
+
+macOS — launchd user agent (`~/Library/LaunchAgents/com.switchboard.scheduler.plist`):
+
+```bash
 uv run --with-editable . switchboard scheduler install-launchd --interval 60 --dry-run
 uv run --with-editable . switchboard scheduler install-launchd --interval 60
 uv run --with-editable . switchboard scheduler launchd-status
 uv run --with-editable . switchboard scheduler uninstall-launchd --dry-run
 ```
+
+Linux — systemd user unit (`~/.config/systemd/user/switchboard-scheduler.service`):
+
+```bash
+uv run --with-editable . switchboard scheduler install-systemd --interval 60 --dry-run
+uv run --with-editable . switchboard scheduler install-systemd --interval 60
+uv run --with-editable . switchboard scheduler systemd-status
+uv run --with-editable . switchboard scheduler uninstall-systemd --dry-run
+```
+
+Cron expressions support `*`, single integers, ranges (`1-5`), lists (`0,30`), and steps (`*/15`). Weekday numbering follows the cron convention (`0` and `7` = Sunday).
 
 ## Telegram/Hermes bridge and bot
 
@@ -200,8 +270,10 @@ Before making the repo public, run the checklist in [`docs/PUBLIC_LAUNCH_CHECKLI
 
 ## Roadmap
 
-- screenshots/GIF demo for README
-- richer dashboard editing for agents/tasks
-- realtime dashboard updates
-- non-macOS systemd installer
+- 30-60s walkthrough GIF/video for the README hero
+- richer dashboard editing for agents/tasks (currently CLI-driven)
+- structured task artifacts (capture diffs from worktrees, not just comment text)
+- agent run history with cost/latency tracking
 - richer collaboration analytics
+
+Shipped recently: per-agent git worktrees, pluggable agent kinds with TOML and entry-point loading, `switchboard run` non-interactive task dispatch, systemd installer, opt-in live mode dashboard, multi-page dashboard with active-state navigation.
