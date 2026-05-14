@@ -4,7 +4,7 @@
 
 It is built for developers who want multiple agents working on the same repo without losing state, context, tasks, or logs.
 
-![Switchboard dashboard preview](docs/assets/dashboard-preview.svg)
+![Switchboard dashboard overview](docs/assets/dashboard-preview.png)
 
 ## What it does
 
@@ -20,7 +20,7 @@ It is built for developers who want multiple agents working on the same repo wit
 - install built-in workflow presets for review/fix/build/audit loops
 - run due workflow prompts with a scheduler daemon
 - handle Telegram-style commands through Hermes or a real Telegram bot
-- polished web dashboard for agents, tasks, workflows/crons, logs, comms, approvals, activity, strategy, analytics, knowledge, experiments, skills, and API actions
+- polished multi-page web dashboard with a dedicated route for every nav item: Overview, Search, Agents, Tasks, Activity, Comms, Approvals, Workflows, Logs, Strategy, Analytics, Knowledge Base, Experiments, Skills
 
 ## Install/dev
 
