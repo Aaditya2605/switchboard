@@ -23,10 +23,12 @@ task_app = typer.Typer(help="Shared Kanban task board.")
 workflow_app = typer.Typer(help="Reusable workflow and cron prompt dispatch.")
 scheduler_app = typer.Typer(help="Run due workflow prompts automatically.")
 telegram_app = typer.Typer(help="Telegram/Hermes text-command bridge.")
+worktree_app = typer.Typer(help="Per-agent git worktree isolation.")
 app.add_typer(task_app, name="task")
 app.add_typer(workflow_app, name="workflow")
 app.add_typer(scheduler_app, name="scheduler")
 app.add_typer(telegram_app, name="telegram")
+app.add_typer(worktree_app, name="worktree")
 
 
 def service() -> SwitchboardService:
@@ -73,13 +75,35 @@ def agents_cmd() -> None:
 
 
 @app.command()
-def spawn(kind: str, name: str, workdir: str, dry_run: bool = typer.Option(False, help="Register only; do not start tmux.")) -> None:
+def spawn(
+    kind: str,
+    name: str,
+    workdir: str,
+    dry_run: bool = typer.Option(False, help="Register only; do not start tmux."),
+    worktree: bool = typer.Option(False, "--worktree", help="Create an isolated git worktree for this agent."),
+    worktree_root: str | None = typer.Option(None, "--worktree-root", help="Override the worktree path. Defaults to $SWITCHBOARD_HOME/worktrees/<name>."),
+    branch: str | None = typer.Option(None, "--branch", help="Branch name for the worktree (default: switchboard/<name>)."),
+) -> None:
     try:
-        agent = service().spawn(kind, name, workdir, dry_run=dry_run)
+        agent = service().spawn(
+            kind,
+            name,
+            workdir,
+            dry_run=dry_run,
+            worktree=worktree,
+            worktree_root=worktree_root,
+            branch=branch,
+        )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     suffix = " (dry-run)" if dry_run else ""
-    typer.echo(f"Spawned {agent.kind} agent '{agent.name}' in {agent.tmux_session}{suffix}")
+    if agent.worktree_path:
+        typer.echo(
+            f"Spawned {agent.kind} agent '{agent.name}' in {agent.tmux_session}{suffix}; "
+            f"worktree={agent.worktree_path} branch={agent.worktree_branch}"
+        )
+    else:
+        typer.echo(f"Spawned {agent.kind} agent '{agent.name}' in {agent.tmux_session}{suffix}")
 
 
 @app.command()
@@ -429,6 +453,34 @@ def telegram_webhook_info() -> None:
     except ValueError as exc:
         fail(exc)
     typer.echo(info)
+
+
+@worktree_app.command("list")
+def worktree_list() -> None:
+    rows = service().list_worktrees()
+    if not rows:
+        typer.echo("No agent worktrees.")
+        return
+    for agent, info in rows:
+        status = "(missing on disk)" if info is None else "ok"
+        branch = agent.worktree_branch or "?"
+        typer.echo(f"{agent.name}\t{branch}\t{agent.worktree_path}\t{status}")
+
+
+@worktree_app.command("prune")
+def worktree_prune(
+    name: str,
+    source: str | None = typer.Option(None, "--source", help="Override the source repo (auto-inferred when omitted)."),
+    confirm: bool = typer.Option(False, "--confirm", help="Required to actually delete the worktree."),
+) -> None:
+    if not confirm:
+        typer.echo("Refusing to delete without --confirm. Re-run with --confirm to proceed.")
+        raise typer.Exit(1)
+    try:
+        agent = service().prune_worktree(name, source_repo=source)
+    except (KeyError, ValueError) as exc:
+        fail(exc)
+    typer.echo(f"Pruned worktree for agent '{agent.name}'")
 
 
 if __name__ == "__main__":

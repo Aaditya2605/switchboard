@@ -18,6 +18,8 @@ class AgentRecord:
     workdir: str
     tmux_session: str
     status: str = "running"
+    worktree_path: str | None = None
+    worktree_branch: str | None = None
 
 
 @dataclass(frozen=True)
@@ -145,6 +147,7 @@ def init_db(db_path: Path | None = None) -> Path:
         )
         _migrate_workflows(conn)
         _migrate_tasks(conn)
+        _migrate_agents(conn)
     return path
 
 
@@ -152,6 +155,13 @@ def list_tables(db_path: Path | None = None) -> list[str]:
     with connect(db_path) as conn:
         rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     return [row["name"] for row in rows]
+
+
+def _row_get(row: sqlite3.Row, key: str, default=None):
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return default
 
 
 def _workflow_columns(conn: sqlite3.Connection) -> set[str]:
@@ -227,27 +237,75 @@ def _migrate_tasks(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
 
 
+def _agent_columns(conn: sqlite3.Connection) -> set[str]:
+    return {row["name"] for row in conn.execute("PRAGMA table_info(agents)").fetchall()}
+
+
+def _migrate_agents(conn: sqlite3.Connection) -> None:
+    columns = _agent_columns(conn)
+    if "worktree_path" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN worktree_path TEXT")
+    if "worktree_branch" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN worktree_branch TEXT")
+
+
 class AgentRepository:
     def __init__(self, db_path: Path | None = None):
         self.db_path = db_path or default_db_path()
 
-    def register(self, name: str, kind: str, workdir: str, tmux_session: str) -> AgentRecord:
-        record = AgentRecord(name=name, kind=kind, workdir=workdir, tmux_session=tmux_session)
+    def register(
+        self,
+        name: str,
+        kind: str,
+        workdir: str,
+        tmux_session: str,
+        worktree_path: str | None = None,
+        worktree_branch: str | None = None,
+    ) -> AgentRecord:
+        record = AgentRecord(
+            name=name,
+            kind=kind,
+            workdir=workdir,
+            tmux_session=tmux_session,
+            worktree_path=worktree_path,
+            worktree_branch=worktree_branch,
+        )
         with connect(self.db_path) as conn:
             conn.execute(
                 """
-                INSERT INTO agents(name, kind, workdir, tmux_session, status)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO agents(name, kind, workdir, tmux_session, status, worktree_path, worktree_branch)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(name) DO UPDATE SET
                     kind=excluded.kind,
                     workdir=excluded.workdir,
                     tmux_session=excluded.tmux_session,
                     status=excluded.status,
+                    worktree_path=excluded.worktree_path,
+                    worktree_branch=excluded.worktree_branch,
                     updated_at=CURRENT_TIMESTAMP
                 """,
-                (record.name, record.kind, record.workdir, record.tmux_session, record.status),
+                (
+                    record.name,
+                    record.kind,
+                    record.workdir,
+                    record.tmux_session,
+                    record.status,
+                    record.worktree_path,
+                    record.worktree_branch,
+                ),
             )
         return record
+
+    def clear_worktree(self, name: str) -> AgentRecord:
+        with connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE agents SET worktree_path = NULL, worktree_branch = NULL, updated_at = CURRENT_TIMESTAMP WHERE name = ?",
+                (name,),
+            )
+        agent = self.get(name)
+        if agent is None:
+            raise KeyError(f"Unknown agent: {name}")
+        return agent
 
     def list(self) -> list[AgentRecord]:
         with connect(self.db_path) as conn:
@@ -498,6 +556,8 @@ class AgentRepository:
             workdir=row["workdir"],
             tmux_session=row["tmux_session"],
             status=row["status"],
+            worktree_path=_row_get(row, "worktree_path"),
+            worktree_branch=_row_get(row, "worktree_branch"),
         )
 
     @staticmethod

@@ -285,17 +285,25 @@ def _activity_html(items: list[tuple[str, str]]) -> str:
 def _agent_rows_html(service: SwitchboardService) -> str:
     agents = service.list_agents()
     if not agents:
-        return "<tr><td colspan='5' class='empty'>No agents registered yet. Spawn one with <code>switchboard spawn claude builder ~/project</code>.</td></tr>"
+        return "<tr><td colspan='6' class='empty'>No agents registered yet. Spawn one with <code>switchboard spawn claude builder ~/project</code>.</td></tr>"
     return "".join(
         "<tr>"
         f"<td><div class='row-title'>{_h(agent.name)}</div><div class='row-sub'>{_h(agent.tmux_session)}</div></td>"
         f"<td>{_status_pill(agent.kind, 'agent')}</td>"
         f"<td>{_status_pill(agent.status, 'good' if agent.status == 'running' else 'bad')}</td>"
         f"<td class='mono'>{_h(agent.workdir)}</td>"
+        f"<td>{_worktree_cell(agent)}</td>"
         f"<td><a class='ghost' href='/comms?agent={_h(agent.name)}'>Send prompt</a></td>"
         "</tr>"
         for agent in agents
     )
+
+
+def _worktree_cell(agent) -> str:
+    if not agent.worktree_path:
+        return "<span class='pill pill-muted'>shared</span>"
+    branch = agent.worktree_branch or "(unknown)"
+    return f"<span class='pill pill-agent'>{_h(branch)}</span>"
 
 
 def _task_rows_html(service: SwitchboardService) -> str:
@@ -397,11 +405,12 @@ def _page_agents(service: SwitchboardService) -> str:
 
     <section class="card panel">
       <div class="panel-head"><div><p class="eyebrow">Registry</p><h2>Active agents</h2></div><input class="filter-input" placeholder="Filter rows..." oninput="filterTables(this.value)" /></div>
-      <table><thead><tr><th>Name</th><th>Kind</th><th>Status</th><th>Workdir</th><th>Action</th></tr></thead><tbody>{_agent_rows_html(service)}</tbody></table>
+      <table><thead><tr><th>Name</th><th>Kind</th><th>Status</th><th>Workdir</th><th>Worktree</th><th>Action</th></tr></thead><tbody>{_agent_rows_html(service)}</tbody></table>
       <div class="panel-foot">
         <p>Spawn a new agent:</p>
         <pre class="code-block">switchboard spawn claude builder ~/projects/myapp
-switchboard spawn codex reviewer ~/projects/myapp</pre>
+switchboard spawn codex reviewer ~/projects/myapp --worktree
+switchboard worktree list</pre>
       </div>
     </section>
     """

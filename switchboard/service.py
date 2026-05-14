@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from pathlib import Path
 
 from switchboard.db import (
     VALID_TASK_PRIORITIES,
@@ -11,23 +12,89 @@ from switchboard.db import (
     TaskCommentRecord,
     TaskRecord,
     WorkflowRecord,
+    switchboard_home,
 )
 from switchboard.tmux import TmuxClient
+from switchboard.worktrees import GitWorktrees, WorktreeError, WorktreeInfo
 
 
 class SwitchboardService:
-    def __init__(self, agents: AgentRepository, tmux: TmuxClient):
+    def __init__(self, agents: AgentRepository, tmux: TmuxClient, worktrees: GitWorktrees | None = None):
         self.agents = agents
         self.tmux = tmux
+        self.worktrees = worktrees or GitWorktrees()
 
-    def spawn(self, kind: str, name: str, workdir: str, dry_run: bool = False) -> AgentRecord:
+    def spawn(
+        self,
+        kind: str,
+        name: str,
+        workdir: str,
+        dry_run: bool = False,
+        worktree: bool = False,
+        worktree_root: str | None = None,
+        branch: str | None = None,
+    ) -> AgentRecord:
         if kind not in {"claude", "codex"}:
             raise ValueError("kind must be 'claude' or 'codex'")
         session = f"switchboard-{self._slug(name)}"
-        agent = self.agents.register(name=name, kind=kind, workdir=workdir, tmux_session=session)
+        final_workdir = workdir
+        wt_path: str | None = None
+        wt_branch: str | None = None
+        if worktree:
+            source = Path(workdir).expanduser().resolve()
+            if worktree_root:
+                target = Path(worktree_root).expanduser().resolve()
+            else:
+                target = (switchboard_home() / "worktrees" / self._slug(name)).resolve()
+            wt_branch = branch or f"switchboard/{self._slug(name)}"
+            info = self.worktrees.create(source, target, wt_branch)
+            wt_path = str(info.path)
+            final_workdir = wt_path
+        agent = self.agents.register(
+            name=name,
+            kind=kind,
+            workdir=final_workdir,
+            tmux_session=session,
+            worktree_path=wt_path,
+            worktree_branch=wt_branch,
+        )
         if not dry_run:
-            self.tmux.start_agent(session, kind, workdir)
+            self.tmux.start_agent(session, kind, final_workdir)
         return agent
+
+    def prune_worktree(self, name: str, source_repo: str | None = None) -> AgentRecord:
+        agent = self._require_agent(name)
+        if not agent.worktree_path:
+            raise ValueError(f"agent {name} has no worktree")
+        target = Path(agent.worktree_path)
+        source = Path(source_repo).expanduser().resolve() if source_repo else self._infer_worktree_source(target)
+        try:
+            self.worktrees.remove(source, target)
+        except WorktreeError as exc:
+            raise ValueError(str(exc)) from exc
+        return self.agents.clear_worktree(name)
+
+    def list_worktrees(self) -> list[tuple[AgentRecord, WorktreeInfo | None]]:
+        out: list[tuple[AgentRecord, WorktreeInfo | None]] = []
+        for agent in self.list_agents():
+            if not agent.worktree_path:
+                continue
+            target = Path(agent.worktree_path)
+            info = WorktreeInfo(path=target, branch=agent.worktree_branch or "(unknown)") if target.exists() else None
+            out.append((agent, info))
+        return out
+
+    @staticmethod
+    def _infer_worktree_source(target: Path) -> Path:
+        # In a linked worktree, ``.git`` is a file pointing at the parent.
+        marker = target / ".git"
+        if marker.is_file():
+            for line in marker.read_text().splitlines():
+                if line.startswith("gitdir:"):
+                    gitdir = Path(line.split(":", 1)[1].strip())
+                    # ``gitdir`` ends with ``.git/worktrees/<name>``; the source repo lives two levels up.
+                    return gitdir.parent.parent.parent
+        return target
 
     def list_agents(self) -> list[AgentRecord]:
         return self.agents.list()
