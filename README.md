@@ -15,7 +15,7 @@ Switchboard Lite is the local MVP:
 - store and run reusable workflow prompts
 - run due workflow prompts with a scheduler daemon
 - handle Telegram-style commands through Hermes or a real Telegram bot
-- web dashboard for agents, tasks, workflows, messages, and API actions
+- polished web dashboard for agents, tasks, workflows/crons, comms, approvals, activity, strategy, analytics, knowledge, experiments, skills, and API actions
 
 ## Install/dev
 
@@ -109,6 +109,8 @@ uv run --with-editable . switchboard spawn claude backend ~/projects/myapp --dry
 ```
 
 ## Dashboard safety
+
+The dashboard is a light operations control plane with left-side sections for Overview, Agents, Tasks, Activity, Comms, Approvals, Workflows, Strategy, Analytics, Knowledge Base, Experiments, and Skills. It includes functional controls for confirmed prompt sends, task moves, workflow runs, table search, and summary refresh.
 
 Set `SWITCHBOARD_DASHBOARD_TOKEN` to require `Authorization: Bearer ...` on dashboard and API requests.
 Mutating API actions also require `"confirm": true` in the JSON body.

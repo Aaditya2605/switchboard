@@ -42,6 +42,45 @@ def test_dashboard_home_shows_switchboard_sections(tmp_path):
     assert "Fix auth" in response.text
 
 
+def test_dashboard_has_control_plane_navigation_and_actions(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    for label in [
+        "Overview",
+        "Agents",
+        "Tasks",
+        "Activity",
+        "Comms",
+        "Approvals",
+        "Workflows",
+        "Strategy",
+        "Analytics",
+        "Knowledge Base",
+        "Experiments",
+        "Skills",
+        "Manage Crons",
+    ]:
+        assert label in response.text
+    assert "data-endpoint=\"/api/send\"" in response.text
+    assert "data-confirm=\"true\"" in response.text
+    assert "runWorkflow(" in response.text
+    assert "moveTask(" in response.text
+
+
+def test_dashboard_escapes_user_controlled_content(tmp_path):
+    client, _ = make_client(tmp_path)
+    service = client.app.state.switchboard_service
+    service.create_task("<script>alert('x')</script>", assigned_agent="backend")
+
+    response = client.get("/")
+
+    assert "<script>alert('x')</script>" not in response.text
+    assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in response.text
+
+
 def test_api_lists_agents_tasks_and_workflows(tmp_path):
     client, _ = make_client(tmp_path)
 
@@ -53,6 +92,22 @@ def test_api_lists_agents_tasks_and_workflows(tmp_path):
     assert tasks[0]["title"] == "Fix auth"
     assert tasks[0]["priority"] == "high"
     assert workflows[0]["name"] == "daily"
+
+
+def test_api_summary_counts_dashboard_resources(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    summary = client.get("/api/summary")
+
+    assert summary.status_code == 200
+    assert summary.json() == {
+        "agents": 2,
+        "running_agents": 2,
+        "tasks": 1,
+        "open_tasks": 1,
+        "workflows": 1,
+        "enabled_workflows": 1,
+    }
 
 
 def test_api_send_prompt_to_agent(tmp_path):
