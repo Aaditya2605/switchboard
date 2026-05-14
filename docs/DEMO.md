@@ -22,12 +22,21 @@ switchboard init
 ## 3. Register two demo agents without launching tmux
 
 ```bash
-switchboard spawn claude builder ~/projects/example-app --dry-run
-switchboard spawn codex reviewer ~/projects/example-app --dry-run
+switchboard spawn claude builder  ~/projects/example-app --dry-run
+switchboard spawn codex  reviewer ~/projects/example-app --dry-run
 switchboard agents
+switchboard kinds   # see all available agent kinds (claude, codex, aider, shell, plus any plugins)
 ```
 
 Remove `--dry-run` when you want real persistent tmux-backed sessions.
+
+For parallel agents on the same repo, give each one its own git worktree:
+
+```bash
+switchboard spawn claude builder  ~/projects/example-app --worktree
+switchboard spawn codex  reviewer ~/projects/example-app --worktree
+switchboard worktree list
+```
 
 ## 4. Add real work to the shared task board
 
@@ -40,6 +49,16 @@ switchboard task add "Ship auth bugfix" \
 
 switchboard task list
 ```
+
+## 4a. Dispatch a task autonomously
+
+```bash
+switchboard run 1                # claude -p (or codex exec) sees the task as its prompt
+switchboard run 1 --complete     # mark it done on a clean exit
+switchboard task comments 1      # read the agent's response
+```
+
+See [`DOGFOOD.md`](DOGFOOD.md) for a real end-to-end run that exercises both Claude and Codex on the same task board.
 
 ## 5. Install useful workflow presets
 
@@ -58,14 +77,15 @@ switchboard dashboard --host 127.0.0.1 --port 8765
 
 Open `http://127.0.0.1:8765`.
 
+Each nav item is its own page (`/agents`, `/tasks`, `/workflows`, …); the sidebar highlights the active route, and a one-click **Live: off** toggle in the sidebar enables a 10-second poll that auto-reloads on state changes.
+
 Dashboard controls include:
 
-- send a confirmed prompt to an agent
-- move tasks through the board
-- create and run workflows
-- load recent agent logs
-- search/filter rows
-- refresh summary metrics
+- send a confirmed prompt to an agent (`/comms`)
+- move tasks through the board, click into `/tasks/<id>` to see the captured `switchboard run` output as comments
+- create and run workflows (`/workflows`)
+- load recent agent logs (`/logs`)
+- per-page row filter + cross-entity `/search?q=...`
 
 ## 7. Safer dashboard mode
 
