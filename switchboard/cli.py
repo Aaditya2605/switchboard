@@ -12,6 +12,7 @@ from switchboard.agent_kinds import default_registry
 from switchboard.dashboard import create_app
 from switchboard.db import AgentRepository, default_db_path, init_db, switchboard_home
 from switchboard.launchd import DEFAULT_LABEL, LaunchdInstaller
+from switchboard.systemd import DEFAULT_UNIT, SystemdInstaller
 from switchboard.presets import workflows_for_profile
 from switchboard.scheduler import Scheduler
 from switchboard.service import SwitchboardService
@@ -51,6 +52,19 @@ def launchd_installer(label: str = DEFAULT_LABEL) -> LaunchdInstaller:
         home=switchboard_home(),
         launch_agents_dir=launch_agents_dir(),
         label=label,
+    )
+
+
+def systemd_units_dir() -> Path:
+    return Path.home() / ".config" / "systemd" / "user"
+
+
+def systemd_installer(unit: str = DEFAULT_UNIT) -> SystemdInstaller:
+    return SystemdInstaller(
+        repo_path=Path.cwd(),
+        home=switchboard_home(),
+        units_dir=systemd_units_dir(),
+        unit=unit,
     )
 
 
@@ -427,6 +441,39 @@ def scheduler_launchd_status(label: str = typer.Option(DEFAULT_LABEL, "--label",
     status = launchd_installer(label).status()
     state = "installed" if status.installed else "not installed"
     typer.echo(f"{status.label}: {state} ({status.plist_path})")
+
+
+@scheduler_app.command("install-systemd")
+def scheduler_install_systemd(
+    interval: int = typer.Option(60, "--interval", "-i", help="Seconds between scheduler ticks."),
+    unit: str = typer.Option(DEFAULT_UNIT, "--unit", help="systemd user unit name."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Write unit but do not call systemctl."),
+) -> None:
+    try:
+        result = systemd_installer(unit).install(interval=interval, dry_run=dry_run)
+    except ValueError as exc:
+        fail(exc)
+    typer.echo(f"{result.action}: {result.unit_path}")
+    for command in result.commands:
+        typer.echo(command)
+
+
+@scheduler_app.command("uninstall-systemd")
+def scheduler_uninstall_systemd(
+    unit: str = typer.Option(DEFAULT_UNIT, "--unit", help="systemd user unit name."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Plan removal but do not call systemctl or delete the unit."),
+) -> None:
+    result = systemd_installer(unit).uninstall(dry_run=dry_run)
+    typer.echo(f"{result.action}: {result.unit_path}")
+    for command in result.commands:
+        typer.echo(command)
+
+
+@scheduler_app.command("systemd-status")
+def scheduler_systemd_status(unit: str = typer.Option(DEFAULT_UNIT, "--unit", help="systemd user unit name.")) -> None:
+    status = systemd_installer(unit).status()
+    state = "installed" if status.installed else "not installed"
+    typer.echo(f"{status.unit}: {state} ({status.unit_path})")
 
 
 @telegram_app.command("handle")
