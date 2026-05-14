@@ -79,6 +79,14 @@ def test_active_nav_state_reflects_current_page(tmp_path):
     assert "class='nav-item active' href='/agents'" not in response.text
 
 
+def test_live_toggle_is_rendered_on_every_page(tmp_path):
+    client, _ = make_client(tmp_path)
+    for path in ["/", "/agents", "/tasks", "/workflows", "/logs", "/comms"]:
+        response = client.get(path)
+        assert "id=\"live-toggle\"" in response.text, f"live toggle missing from {path}"
+        assert "setLiveEnabled" in response.text, f"live JS missing from {path}"
+
+
 def test_agents_page_shows_agents(tmp_path):
     client, _ = make_client(tmp_path)
 

@@ -754,7 +754,13 @@ def _render_layout(active_path: str, body: str, auth_enabled: bool, page_title: 
   <aside class="sidebar">
     <a class="brand" href="/"><div class="logo">S</div><div><strong>Switchboard</strong><span>agent ops</span></div></a>
     {_nav_html(active_path)}
-    <div class="side-card"><span class="dot"></span>{_h(auth_note)}<br><small>Mutations require <code>confirm: true</code></small></div>
+    <div class="side-card">
+      <span class="dot"></span>{_h(auth_note)}<br><small>Mutations require <code>confirm: true</code></small>
+      <div class="live-toggle">
+        <button id="live-toggle" type="button" onclick="toggleLive()" aria-pressed="false">Live: off</button>
+        <small>Poll <code>/api/summary</code> every 10s and reload on change.</small>
+      </div>
+    </div>
   </aside>
 
   <main class="shell">
@@ -780,6 +786,10 @@ def _dashboard_css() -> str:
 .nav-item:hover{background:#f8f3df;color:#17130a}
 .nav-item.active{background:var(--yellow-soft);color:#17130a;font-weight:650}
 .side-card{margin:20px 8px;padding:12px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.45);color:var(--muted);line-height:1.55}
+.live-toggle{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.live-toggle button{width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:white;font:inherit;cursor:pointer;color:#3a382f;font-weight:650}
+.live-toggle button[aria-pressed="true"]{background:#e8f7ec;border-color:#bfe6c5;color:#1d7f36}
+.live-toggle small{color:var(--muted);font-size:11px;line-height:1.4}
 .dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--green);margin-right:7px}
 .shell{margin-left:255px;padding:28px;max-width:1450px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}
@@ -868,4 +878,11 @@ async function createWorkflow(event){event.preventDefault();const form=event.cur
 async function loadLogs(){const agent=document.getElementById('log-agent').value;const lines=document.getElementById('log-lines').value||120;const out=document.getElementById('log-output');try{const data=await fetch(`/api/logs/${encodeURIComponent(agent)}?lines=${encodeURIComponent(lines)}`).then(r=>{if(!r.ok)throw new Error(r.statusText);return r.json()});out.classList.remove('empty');out.textContent=data.logs||'(no logs)';toast(`Loaded logs for ${agent}`)}catch(err){out.textContent=`Failed to load logs: ${err.message}`;toast(`Logs failed: ${err.message}`)}}
 function filterTables(query){const q=(query||'').toLowerCase();document.querySelectorAll('tbody tr').forEach(row=>{row.style.display=row.innerText.toLowerCase().includes(q)?'':'none'})}
 async function refreshSummary(){try{const data=await fetch('/api/summary').then(r=>r.json());toast(`${data.agents} agents · ${data.tasks} tasks · ${data.workflows} workflows`)}catch(err){toast(`Refresh failed: ${err.message}`)}}
+const LIVE_KEY='switchboard.live';
+let __liveTimer=null;
+let __liveHash=null;
+async function pollLive(){try{const data=await fetch('/api/summary',{cache:'no-cache'}).then(r=>r.json());const hash=JSON.stringify(data);if(__liveHash!==null&&__liveHash!==hash){location.reload();return}__liveHash=hash}catch{}}
+function setLiveEnabled(enabled){const btn=document.getElementById('live-toggle');if(btn){btn.setAttribute('aria-pressed',String(enabled));btn.textContent=`Live: ${enabled?'on':'off'}`}if(__liveTimer){clearInterval(__liveTimer);__liveTimer=null}if(enabled){__liveHash=null;pollLive();__liveTimer=setInterval(pollLive,10000)}localStorage.setItem(LIVE_KEY,enabled?'1':'0')}
+function toggleLive(){setLiveEnabled(localStorage.getItem(LIVE_KEY)!=='1')}
+document.addEventListener('DOMContentLoaded',()=>{setLiveEnabled(localStorage.getItem(LIVE_KEY)==='1')});
 """
