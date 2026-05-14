@@ -31,16 +31,42 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class AgentKind:
+    """Metadata describing how to launch a single agent.
+
+    ``command`` is the interactive form that ``switchboard spawn`` boots inside
+    tmux. ``one_shot`` is an optional argv prefix for non-interactive runs
+    (``switchboard run``); the task prompt is appended as the final argument.
+    """
+
     name: str
     command: str
     description: str = ""
+    one_shot: tuple[str, ...] | None = None
 
 
 BUILTIN_KINDS: tuple[AgentKind, ...] = (
-    AgentKind(name="claude", command="claude", description="Claude Code (Anthropic)"),
-    AgentKind(name="codex", command="codex", description="Codex CLI (OpenAI)"),
-    AgentKind(name="aider", command="aider", description="aider AI pair-programmer"),
-    AgentKind(name="shell", command="bash -i", description="Interactive shell for ad-hoc work"),
+    AgentKind(
+        name="claude",
+        command="claude",
+        description="Claude Code (Anthropic)",
+        one_shot=("claude", "-p"),
+    ),
+    AgentKind(
+        name="codex",
+        command="codex",
+        description="Codex CLI (OpenAI)",
+        one_shot=("codex", "exec"),
+    ),
+    AgentKind(
+        name="aider",
+        command="aider",
+        description="aider AI pair-programmer",
+    ),
+    AgentKind(
+        name="shell",
+        command="bash -i",
+        description="Interactive shell for ad-hoc work",
+    ),
 )
 
 
@@ -90,8 +116,19 @@ class AgentKindRegistry:
             command = fields.get("command")
             if not command:
                 continue
+            one_shot_raw = fields.get("one_shot")
+            one_shot: tuple[str, ...] | None
+            if isinstance(one_shot_raw, list) and all(isinstance(part, str) for part in one_shot_raw):
+                one_shot = tuple(one_shot_raw)
+            else:
+                one_shot = None
             self.register(
-                AgentKind(name=name, command=str(command), description=str(fields.get("description", "")))
+                AgentKind(
+                    name=name,
+                    command=str(command),
+                    description=str(fields.get("description", "")),
+                    one_shot=one_shot,
+                )
             )
             count += 1
         return count

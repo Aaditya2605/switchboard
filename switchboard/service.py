@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from datetime import date
 from pathlib import Path
+from typing import Callable, Sequence
 
 from switchboard.agent_kinds import AgentKindRegistry
 from switchboard.db import (
@@ -19,6 +21,29 @@ from switchboard.tmux import TmuxClient
 from switchboard.worktrees import GitWorktrees, WorktreeError, WorktreeInfo
 
 
+OneShotRunner = Callable[[Sequence[str], str, int], "OneShotResult"]
+
+
+class OneShotResult:
+    """Lightweight stand-in for ``subprocess.CompletedProcess`` so tests can stub the runner."""
+
+    def __init__(self, stdout: str = "", stderr: str = "", returncode: int = 0) -> None:
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
+
+def _default_one_shot_runner(args: Sequence[str], cwd: str, timeout: int) -> OneShotResult:
+    proc = subprocess.run(
+        list(args),
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return OneShotResult(stdout=proc.stdout, stderr=proc.stderr, returncode=proc.returncode)
+
+
 class SwitchboardService:
     def __init__(
         self,
@@ -26,11 +51,13 @@ class SwitchboardService:
         tmux: TmuxClient,
         worktrees: GitWorktrees | None = None,
         agent_kinds: AgentKindRegistry | None = None,
+        one_shot_runner: OneShotRunner | None = None,
     ):
         self.agents = agents
         self.tmux = tmux
         self.worktrees = worktrees or GitWorktrees()
         self.agent_kinds = agent_kinds or AgentKindRegistry()
+        self.one_shot_runner: OneShotRunner = one_shot_runner or _default_one_shot_runner
 
     def spawn(
         self,
@@ -167,6 +194,62 @@ class SwitchboardService:
     ) -> TaskRecord:
         self._validate_task_metadata(priority=priority, due_date=due_date)
         return self.agents.update_task_metadata(task_id, priority=priority, repo=repo, due_date=due_date)
+
+    def run_task(
+        self,
+        task_id: int,
+        timeout: int = 600,
+        mark_completed: bool = False,
+    ) -> tuple[TaskRecord, TaskCommentRecord]:
+        """Dispatch a task to its assigned agent's non-interactive CLI.
+
+        Resolves the agent's kind (e.g. ``claude``, ``codex``) to its ``one_shot``
+        argv prefix, runs ``[*prefix, prompt]`` in the agent's workdir, captures
+        the response as a task comment, and (optionally) marks the task done.
+        """
+
+        task = self.agents.get_task(task_id)
+        if task is None:
+            raise KeyError(f"Unknown task: {task_id}")
+        if not task.assigned_agent:
+            raise ValueError(f"Task #{task_id} has no assigned agent")
+        agent = self._require_agent(task.assigned_agent)
+        kind = self.agent_kinds.require(agent.kind)
+        if not kind.one_shot:
+            raise ValueError(
+                f"Agent kind {kind.name!r} does not support non-interactive run (no one_shot configured)"
+            )
+
+        prompt = self._task_prompt(task)
+        if task.status == "assigned":
+            self.agents.move_task(task_id, "in_progress")
+
+        result = self.one_shot_runner(tuple(kind.one_shot) + (prompt,), agent.workdir, timeout)
+        output = (result.stdout or "").strip()
+        if not output and result.stderr:
+            output = f"(stderr) {result.stderr.strip()}"
+        if not output:
+            output = "(no output captured)"
+        if result.returncode != 0:
+            output = f"[exit {result.returncode}]\n{output}"
+
+        comment = self.agents.add_task_comment(task_id, author=agent.name, body=output)
+        if mark_completed and result.returncode == 0:
+            self.agents.move_task(task_id, "completed")
+
+        task = self.agents.get_task(task_id)
+        assert task is not None
+        return task, comment
+
+    @staticmethod
+    def _task_prompt(task: TaskRecord) -> str:
+        body = task.title.strip()
+        if task.description:
+            body = f"{body}\n\n{task.description.strip()}"
+        repo = (task.repo or "").strip()
+        if repo:
+            body = f"{body}\n\nRepo: {repo}"
+        return body
 
     def add_task_comment(self, task_id: int, author: str, body: str) -> TaskCommentRecord:
         if not body.strip():

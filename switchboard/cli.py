@@ -121,6 +121,21 @@ def spawn(
 
 
 @app.command()
+def run(
+    task_id: int,
+    timeout: int = typer.Option(600, "--timeout", help="Subprocess timeout in seconds."),
+    complete: bool = typer.Option(False, "--complete", help="Mark the task completed on a clean exit."),
+) -> None:
+    """Dispatch a task to its assigned agent's non-interactive CLI (claude -p / codex exec)."""
+
+    try:
+        task, comment = service().run_task(task_id, timeout=timeout, mark_completed=complete)
+    except (KeyError, ValueError) as exc:
+        fail(exc)
+    typer.echo(f"Task #{task.id} ({task.status}) ran via {comment.author}; comment #{comment.id} captured.")
+
+
+@app.command()
 def send(name: str, prompt: str) -> None:
     try:
         service().send(name, prompt)
