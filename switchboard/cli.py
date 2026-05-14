@@ -8,6 +8,7 @@ from pathlib import Path
 import typer
 import uvicorn
 
+from switchboard.agent_kinds import default_registry
 from switchboard.dashboard import create_app
 from switchboard.db import AgentRepository, default_db_path, init_db, switchboard_home
 from switchboard.launchd import DEFAULT_LABEL, LaunchdInstaller
@@ -33,7 +34,11 @@ app.add_typer(worktree_app, name="worktree")
 
 def service() -> SwitchboardService:
     init_db(default_db_path())
-    return SwitchboardService(AgentRepository(default_db_path()), TmuxClient())
+    return SwitchboardService(
+        AgentRepository(default_db_path()),
+        TmuxClient(),
+        agent_kinds=default_registry(),
+    )
 
 
 def launch_agents_dir() -> Path:
@@ -72,6 +77,15 @@ def agents_cmd() -> None:
         return
     for agent in agents:
         typer.echo(f"{agent.name}\t{agent.kind}\t{agent.status}\t{agent.workdir}")
+
+
+@app.command("kinds")
+def kinds_cmd() -> None:
+    """List available agent kinds (builtin + ~/.switchboard/agent_kinds.toml + plugins)."""
+
+    for kind in default_registry().all():
+        desc = f"\t{kind.description}" if kind.description else ""
+        typer.echo(f"{kind.name}\t{kind.command}{desc}")
 
 
 @app.command()

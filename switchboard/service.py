@@ -4,6 +4,7 @@ import re
 from datetime import date
 from pathlib import Path
 
+from switchboard.agent_kinds import AgentKindRegistry
 from switchboard.db import (
     VALID_TASK_PRIORITIES,
     AgentRecord,
@@ -19,10 +20,17 @@ from switchboard.worktrees import GitWorktrees, WorktreeError, WorktreeInfo
 
 
 class SwitchboardService:
-    def __init__(self, agents: AgentRepository, tmux: TmuxClient, worktrees: GitWorktrees | None = None):
+    def __init__(
+        self,
+        agents: AgentRepository,
+        tmux: TmuxClient,
+        worktrees: GitWorktrees | None = None,
+        agent_kinds: AgentKindRegistry | None = None,
+    ):
         self.agents = agents
         self.tmux = tmux
         self.worktrees = worktrees or GitWorktrees()
+        self.agent_kinds = agent_kinds or AgentKindRegistry()
 
     def spawn(
         self,
@@ -34,8 +42,7 @@ class SwitchboardService:
         worktree_root: str | None = None,
         branch: str | None = None,
     ) -> AgentRecord:
-        if kind not in {"claude", "codex"}:
-            raise ValueError("kind must be 'claude' or 'codex'")
+        agent_kind = self.agent_kinds.require(kind)
         session = f"switchboard-{self._slug(name)}"
         final_workdir = workdir
         wt_path: str | None = None
@@ -52,14 +59,14 @@ class SwitchboardService:
             final_workdir = wt_path
         agent = self.agents.register(
             name=name,
-            kind=kind,
+            kind=agent_kind.name,
             workdir=final_workdir,
             tmux_session=session,
             worktree_path=wt_path,
             worktree_branch=wt_branch,
         )
         if not dry_run:
-            self.tmux.start_agent(session, kind, final_workdir)
+            self.tmux.start_agent(session, agent_kind.command, final_workdir)
         return agent
 
     def prune_worktree(self, name: str, source_repo: str | None = None) -> AgentRecord:

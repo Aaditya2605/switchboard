@@ -19,8 +19,14 @@ class TmuxClient:
         if self.runner is None:
             self.runner = SubprocessRunner()
 
-    def start_agent(self, session: str, kind: str, workdir: str) -> None:
-        command = self._agent_command(kind)
+    def start_agent(self, session: str, command: str, workdir: str) -> None:
+        """Start a detached tmux session running ``command`` in ``workdir``.
+
+        ``command`` is the full shell invocation for the agent CLI
+        (e.g. ``"claude"``, ``"codex"``, ``"bash -i"``). The legacy
+        per-kind lookup has moved to :mod:`switchboard.agent_kinds`.
+        """
+
         shell = f"cd {shlex.quote(workdir)} && {command}"
         self.runner.run(
             f"tmux new-session -d -s {shlex.quote(session)} {shlex.quote(shell)}"
@@ -46,10 +52,3 @@ class TmuxClient:
             return False
         return True
 
-    @staticmethod
-    def _agent_command(kind: str) -> str:
-        if kind == "claude":
-            return "claude"
-        if kind == "codex":
-            return "codex"
-        raise ValueError(f"Unsupported agent kind: {kind}")
