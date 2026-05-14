@@ -26,6 +26,13 @@ class MoveTaskRequest(ConfirmedRequest):
     status: str
 
 
+class CreateWorkflowRequest(ConfirmedRequest):
+    name: str
+    agent: str
+    prompt: str
+    cron: str
+
+
 def create_app(service: SwitchboardService, auth_token: str | None = None) -> FastAPI:
     app = FastAPI(title="Switchboard Dashboard")
     app.state.switchboard_service = service
@@ -81,11 +88,21 @@ def create_app(service: SwitchboardService, auth_token: str | None = None) -> Fa
     def api_inbox(agent: str):
         return [asdict(message) for message in service.inbox(agent)]
 
+    @app.get("/api/logs/{agent}", dependencies=[auth])
+    def api_logs(agent: str, lines: int = 120):
+        safe_lines = max(10, min(lines, 500))
+        return {"agent": agent, "logs": service.logs(agent, lines=safe_lines), "lines": safe_lines}
+
     @app.post("/api/send", dependencies=[auth])
     def api_send(request: SendRequest):
         require_confirm(request)
         service.send(request.agent, request.prompt)
         return {"ok": True}
+
+    @app.post("/api/workflows", dependencies=[auth])
+    def api_create_workflow(request: CreateWorkflowRequest):
+        require_confirm(request)
+        return asdict(service.create_workflow(request.name, agent_name=request.agent, prompt=request.prompt, cron=request.cron))
 
     @app.post("/api/tasks/{task_id}/move", dependencies=[auth])
     def api_move_task(task_id: int, request: MoveTaskRequest):
@@ -117,7 +134,7 @@ def _render_dashboard(agents, tasks, workflows, auth_enabled: bool = False) -> s
 
     nav_groups = [
         ("Core", ["Search", "Overview", "Agents", "Tasks", "Activity"]),
-        ("Operations", ["Comms", "Approvals", "Workflows", "Strategy", "Analytics"]),
+        ("Operations", ["Comms", "Approvals", "Workflows", "Logs", "Strategy", "Analytics"]),
         ("Intelligence", ["Knowledge Base", "Experiments", "Skills"]),
     ]
     nav_html = "".join(
@@ -239,6 +256,22 @@ def _render_dashboard(agents, tasks, workflows, auth_enabled: bool = False) -> s
       <div class="panel-head"><div><p class="eyebrow">Operations</p><h2>Workflows</h2></div><span>{len(workflows)} crons shown</span></div>
       <h3>Manage Crons</h3>
       <table><thead><tr><th>Workflow</th><th>Agent</th><th>Schedule</th><th>State</th><th>Last run</th><th>Action</th></tr></thead><tbody>{workflow_rows}</tbody></table>
+      <div class="inline-form">
+        <h3>Create workflow</h3>
+        <form id="workflow-form" data-endpoint="/api/workflows" data-confirm="true" onsubmit="createWorkflow(event)">
+          <input name="name" placeholder="workflow-name" required />
+          <select name="agent">{agent_options}</select>
+          <input name="cron" placeholder="0 9 * * *" required />
+          <textarea name="prompt" placeholder="Prompt to run on schedule..." required></textarea>
+          <button class="primary small" type="submit">Create confirmed workflow</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="logs" class="card panel">
+      <div class="panel-head"><div><p class="eyebrow">Logs</p><h2>Agent logs</h2></div><button class="secondary small" onclick="loadLogs()">Load logs</button></div>
+      <div class="log-controls"><select id="log-agent">{agent_options}</select><input id="log-lines" type="number" min="10" max="500" value="120" /></div>
+      <pre id="log-output" class="log-output">Choose an agent and load recent tmux logs.</pre>
     </section>
 
     <section id="approvals" class="grid-two">
@@ -302,6 +335,7 @@ def _nav_icon(item: str) -> str:
         "Comms": "✉",
         "Approvals": "✓",
         "Workflows": "⚙",
+        "Logs": "▤",
         "Strategy": "◇",
         "Analytics": "▦",
         "Knowledge Base": "◫",
@@ -325,6 +359,8 @@ async function postJSON(url,payload){const res=await fetch(url,{method:'POST',he
 async function sendPrompt(event){event.preventDefault();const form=event.currentTarget;const agent=form.agent.value;const prompt=form.prompt.value.trim();if(!prompt)return;try{await postJSON('/api/send',{agent,prompt});form.prompt.value='';toast(`Sent prompt to ${agent}`)}catch(err){toast(`Send failed: ${err.message}`)}}
 async function runWorkflow(name){try{await postJSON(`/api/workflows/${encodeURIComponent(name)}/run`,{});toast(`Ran workflow: ${name}`);setTimeout(()=>location.reload(),700)}catch(err){toast(`Workflow failed: ${err.message}`)}}
 async function moveTask(id,status){try{await postJSON(`/api/tasks/${id}/move`,{status});toast(`Moved task #${id} to ${status}`);setTimeout(()=>location.reload(),500)}catch(err){toast(`Move failed: ${err.message}`)}}
+async function createWorkflow(event){event.preventDefault();const form=event.currentTarget;const payload={name:form.name.value.trim(),agent:form.agent.value,cron:form.cron.value.trim(),prompt:form.prompt.value.trim()};if(!payload.name||!payload.prompt||!payload.cron)return;try{await postJSON('/api/workflows',payload);toast(`Created workflow: ${payload.name}`);setTimeout(()=>location.reload(),700)}catch(err){toast(`Create failed: ${err.message}`)}}
+async function loadLogs(){const agent=document.getElementById('log-agent').value;const lines=document.getElementById('log-lines').value||120;const out=document.getElementById('log-output');try{const data=await fetch(`/api/logs/${encodeURIComponent(agent)}?lines=${encodeURIComponent(lines)}`).then(r=>{if(!r.ok)throw new Error(r.statusText);return r.json()});out.textContent=data.logs||'(no logs)';toast(`Loaded logs for ${agent}`)}catch(err){out.textContent=`Failed to load logs: ${err.message}`;toast(`Logs failed: ${err.message}`)}}
 function fillAgent(name){document.getElementById('agent-select').value=name;document.querySelector('#send-prompt textarea').focus();location.hash='send-prompt'}
 function filterTables(query){const q=query.toLowerCase();document.querySelectorAll('tbody tr').forEach(row=>{row.style.display=row.innerText.toLowerCase().includes(q)?'':'none'})}
 async function refreshSummary(){try{const data=await fetch('/api/summary').then(r=>r.json());document.getElementById('summary-json').textContent=`${data.agents} agents · ${data.tasks} tasks · ${data.workflows} workflows`;toast('Summary refreshed')}catch(err){toast(`Refresh failed: ${err.message}`)}}

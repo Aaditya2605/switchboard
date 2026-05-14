@@ -11,6 +11,7 @@ import uvicorn
 from switchboard.dashboard import create_app
 from switchboard.db import AgentRepository, default_db_path, init_db, switchboard_home
 from switchboard.launchd import DEFAULT_LABEL, LaunchdInstaller
+from switchboard.presets import workflows_for_profile
 from switchboard.scheduler import Scheduler
 from switchboard.service import SwitchboardService
 from switchboard.telegram import handle_telegram_command
@@ -270,6 +271,25 @@ def workflow_list() -> None:
     for workflow in workflows:
         state = "enabled" if workflow.enabled else "disabled"
         typer.echo(f"#{workflow.id}\t{state}\t{workflow.name}\t{workflow.agent_name}\t{workflow.cron}")
+
+
+@workflow_app.command("install-presets")
+def workflow_install_presets(
+    agent: str = typer.Option(..., "--agent", "-a", help="Agent that should run the preset workflows."),
+    profile: str = typer.Option("launch", "--profile", help="Preset profile: launch or daily."),
+) -> None:
+    presets = workflows_for_profile(profile)
+    if not presets:
+        raise typer.BadParameter("profile must be one of: daily, launch")
+    svc = service()
+    installed = []
+    try:
+        for preset in presets:
+            workflow = svc.create_workflow(preset.name, agent_name=agent, prompt=preset.prompt, cron=preset.cron)
+            installed.append(workflow.name)
+    except (KeyError, ValueError) as exc:
+        fail(exc)
+    typer.echo(f"Installed {len(installed)} {profile} preset workflow(s): {', '.join(installed)}")
 
 
 @workflow_app.command("run")

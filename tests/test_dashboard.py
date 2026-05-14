@@ -62,12 +62,16 @@ def test_dashboard_has_control_plane_navigation_and_actions(tmp_path):
         "Experiments",
         "Skills",
         "Manage Crons",
+        "Logs",
+        "Create workflow",
     ]:
         assert label in response.text
     assert "data-endpoint=\"/api/send\"" in response.text
+    assert "data-endpoint=\"/api/workflows\"" in response.text
     assert "data-confirm=\"true\"" in response.text
     assert "runWorkflow(" in response.text
     assert "moveTask(" in response.text
+    assert "loadLogs(" in response.text
 
 
 def test_dashboard_escapes_user_controlled_content(tmp_path):
@@ -133,6 +137,23 @@ def test_api_move_task_and_run_workflow(tmp_path):
     assert any("Workflow: daily" in command for command in runner.commands)
 
 
+def test_api_create_workflow_and_fetch_agent_logs(tmp_path):
+    client, runner = make_client(tmp_path)
+    runner.commands.append("existing log line")
+
+    created = client.post(
+        "/api/workflows",
+        json={"name": "launch-audit", "agent": "backend", "prompt": "Audit launch", "cron": "0 10 * * *", "confirm": True},
+    )
+    logs = client.get("/api/logs/backend?lines=9999")
+
+    assert created.status_code == 200
+    assert created.json()["name"] == "launch-audit"
+    assert logs.status_code == 200
+    assert logs.json()["agent"] == "backend"
+    assert any("-S -500" in command for command in runner.commands)
+
+
 def test_dashboard_requires_bearer_token_when_configured(tmp_path):
     client, _ = make_client(tmp_path, token="secret-token")
 
@@ -148,10 +169,15 @@ def test_mutating_dashboard_actions_require_confirmation(tmp_path):
     client, runner = make_client(tmp_path)
 
     send = client.post("/api/send", json={"agent": "backend", "prompt": "Run tests"})
+    create_workflow = client.post(
+        "/api/workflows",
+        json={"name": "new", "agent": "backend", "prompt": "Run", "cron": "0 9 * * *"},
+    )
     move = client.post("/api/tasks/1/move", json={"status": "completed"})
     run = client.post("/api/workflows/daily/run", json={})
 
     assert send.status_code == 400
+    assert create_workflow.status_code == 400
     assert move.status_code == 400
     assert run.status_code == 400
     assert not any("Run tests" in command for command in runner.commands)

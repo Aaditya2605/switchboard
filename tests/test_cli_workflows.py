@@ -75,3 +75,21 @@ def test_workflow_run_command(tmp_path, monkeypatch):
 
     assert result.exit_code == 0
     assert "Ran workflow" in result.output
+
+
+def test_workflow_install_presets_command(tmp_path, monkeypatch):
+    setup_db(tmp_path, monkeypatch)
+
+    result = runner.invoke(app, ["workflow", "install-presets", "--agent", "backend", "--profile", "launch"])
+
+    assert result.exit_code == 0
+    assert "Installed" in result.output
+    assert "launch" in result.output
+
+    result = runner.invoke(app, ["workflow", "list"])
+
+    assert result.exit_code == 0
+    assert "code-review" in result.output
+    assert "bugfix-loop" in result.output
+    assert "feature-build" in result.output
+    assert "launch-audit" in result.output
