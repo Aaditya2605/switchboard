@@ -129,6 +129,8 @@ uv run --with-editable . switchboard task comments 1
 
 Behind the scenes Switchboard resolves the agent's kind to its `one_shot` argv prefix (`claude -p`, `codex exec`, ...) and shells out from the agent's workdir. Pair it with `--worktree` for isolated multi-agent runs against the same repo.
 
+A real end-to-end run driving Claude *and* Codex from the same task board lives in [`docs/DOGFOOD.md`](docs/DOGFOOD.md).
+
 ## Agent-to-agent comms
 
 ```bash

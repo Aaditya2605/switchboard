@@ -90,6 +90,14 @@ def create_app(service: SwitchboardService, auth_token: str | None = None) -> Fa
     def tasks_page() -> str:
         return layout("/tasks", _page_tasks(service), title="Tasks · Switchboard")
 
+    @app.get("/tasks/{task_id}", response_class=HTMLResponse, dependencies=[auth])
+    def task_detail_page(task_id: int) -> str:
+        try:
+            body = _page_task_detail(service, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Unknown task")
+        return layout("/tasks", body, title=f"Task #{task_id} · Switchboard")
+
     @app.get("/activity", response_class=HTMLResponse, dependencies=[auth])
     def activity_page() -> str:
         return layout("/activity", _page_activity(service), title="Activity · Switchboard")
@@ -316,7 +324,8 @@ def _task_rows_html(service: SwitchboardService) -> str:
     )
     return "".join(
         "<tr>"
-        f"<td><div class='row-title'>#{task.id} {_h(task.title)}</div><div class='row-sub'>{_h(task.description or 'No description')}</div></td>"
+        f"<td><div class='row-title'><a class='row-link' href='/tasks/{task.id}'>#{task.id} {_h(task.title)}</a></div>"
+        f"<div class='row-sub'>{_h(_truncate(task.description or 'No description', 140))}</div></td>"
         f"<td>{_status_pill(task.status, _task_tone(task.status))}</td>"
         f"<td>{_h(task.assigned_agent or 'unassigned')}</td>"
         f"<td>{_status_pill(task.priority, _priority_tone(task.priority))}</td>"
@@ -326,6 +335,62 @@ def _task_rows_html(service: SwitchboardService) -> str:
         "</tr>"
         for task in tasks
     )
+
+
+def _page_task_detail(service: SwitchboardService, task_id: int) -> str:
+    task = service.agents.get_task(task_id)
+    if task is None:
+        raise KeyError(task_id)
+    comments = service.list_task_comments(task_id)
+    assignee = task.assigned_agent or "unassigned"
+    description = _h(task.description or "")
+    status_pill = _status_pill(task.status, _task_tone(task.status))
+    priority_pill = _status_pill(task.priority, _priority_tone(task.priority))
+    move_buttons = "".join(
+        f"<button class='tiny' onclick=\"moveTask({task.id},'{_js(status)}')\">{_h(status)}</button>"
+        for status in VALID_TASK_STATUSES
+    )
+    if comments:
+        comment_html = "".join(
+            "<div class='comment'>"
+            f"<div class='comment-head'><strong>{_h(comment.author)}</strong>"
+            f"<span class='muted'> · {_h(comment.created_at)}</span></div>"
+            f"<pre class='comment-body'>{_h(comment.body)}</pre>"
+            "</div>"
+            for comment in comments
+        )
+    else:
+        comment_html = "<div class='empty'>No comments yet. <code>switchboard run " f"{task.id}</code> dispatches the task to its agent and captures the response here.</div>"
+    description_block = (
+        f"<pre class='code-block'>{description}</pre>" if task.description else "<p class='muted'>No description.</p>"
+    )
+    return f"""
+    <section class="page-head">
+      <div>
+        <p class="eyebrow">Task</p>
+        <h1>#{task.id} {_h(task.title)}</h1>
+        <p class="muted">Assignee: <strong>{_h(assignee)}</strong> · Repo: <span class="mono">{_h(task.repo or '—')}</span> · Due: {_h(task.due_date or '—')}</p>
+      </div>
+      <div class="page-head-meta">
+        {status_pill} {priority_pill}
+      </div>
+    </section>
+
+    <section class="card panel padded">
+      <h2>Description</h2>
+      {description_block}
+      <div class="task-actions">
+        <span>Move:</span>{move_buttons}
+        <a class="ghost small" href="/tasks">← All tasks</a>
+      </div>
+    </section>
+
+    <section class="card panel padded">
+      <h2>Comments &amp; run output</h2>
+      <p class="muted">Each <code>switchboard run #{task.id}</code> captures the agent's response here. {len(comments)} comment(s).</p>
+      <div class="comment-list">{comment_html}</div>
+    </section>
+    """
 
 
 def _workflow_rows_html(service: SwitchboardService) -> str:
@@ -859,6 +924,14 @@ td{padding:13px 14px;border-bottom:1px solid #ebe6da;vertical-align:middle}tr:la
 .approval-box,.empty{padding:16px;border:1px dashed var(--line);border-radius:14px;background:#fbf8ef;color:var(--muted)}
 .result-list{margin:0;padding:0;list-style:none;display:grid;gap:8px}
 .result-list li{padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fffaf0}
+.row-link{color:inherit;text-decoration:none;border-bottom:1px dotted transparent}
+.row-link:hover{border-bottom-color:#9b7a10}
+.task-actions{display:flex;gap:6px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.task-actions span{color:var(--muted);margin-right:4px}
+.comment-list{display:grid;gap:14px;margin-top:8px}
+.comment{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:#fffaf0}
+.comment-head{margin-bottom:8px;font-size:13px}
+.comment-body{margin:0;font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;color:#3a382f;white-space:pre-wrap;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow-x:auto;max-height:520px;overflow-y:auto}
 .steps{margin:8px 0 0;padding-left:20px}.steps li{margin:6px 0;line-height:1.6}
 #toast{position:fixed;right:22px;bottom:22px;max-width:360px;background:#111827;color:white;padding:12px 14px;border-radius:14px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.2s}#toast.show{opacity:1;transform:translateY(0)}
 code{background:#f1eee5;border:1px solid #e2ddd0;border-radius:7px;padding:1px 5px;font-family:"SFMono-Regular",Consolas,monospace;font-size:12px}

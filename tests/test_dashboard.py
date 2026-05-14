@@ -106,6 +106,26 @@ def test_tasks_page_shows_tasks(tmp_path):
     assert response.status_code == 200
     assert "Fix auth" in response.text
     assert "moveTask(" in response.text
+    assert "href='/tasks/1'" in response.text  # row links to detail page
+
+
+def test_task_detail_page_shows_description_and_comments(tmp_path):
+    client, _ = make_client(tmp_path)
+    service = client.app.state.switchboard_service
+    service.add_task_comment(1, author="builder", body="ran the audit; found two issues")
+
+    response = client.get("/tasks/1")
+
+    assert response.status_code == 200
+    assert "Fix auth" in response.text
+    assert "ran the audit; found two issues" in response.text
+    assert "builder" in response.text
+
+
+def test_task_detail_404_for_unknown_task(tmp_path):
+    client, _ = make_client(tmp_path)
+    response = client.get("/tasks/999")
+    assert response.status_code == 404
 
 
 def test_workflows_page_has_creation_form_and_actions(tmp_path):
