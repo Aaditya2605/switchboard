@@ -1,3 +1,4 @@
+import click
 from typer.testing import CliRunner
 
 from switchboard.cli import app
@@ -52,4 +53,4 @@ def test_scheduler_daemon_help_lists_options():
     result = runner.invoke(app, ["scheduler", "daemon", "--help"])
 
     assert result.exit_code == 0
-    assert "--interval" in result.output
+    assert "--interval" in click.unstyle(result.output)

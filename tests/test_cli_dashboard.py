@@ -1,3 +1,4 @@
+import click
 from typer.testing import CliRunner
 
 import switchboard.cli as cli
@@ -9,11 +10,13 @@ runner = CliRunner()
 
 def test_dashboard_command_help():
     result = runner.invoke(app, ["dashboard", "--help"])
+    # Typer forces ANSI styling when GITHUB_ACTIONS/FORCE_COLOR is set.
+    output = click.unstyle(result.output)
 
     assert result.exit_code == 0
-    assert "--host" in result.output
-    assert "--port" in result.output
-    assert "--require-token" in result.output
+    assert "--host" in output
+    assert "--port" in output
+    assert "--require-token" in output
 
 
 def test_dashboard_require_token_fails_without_env(monkeypatch):
