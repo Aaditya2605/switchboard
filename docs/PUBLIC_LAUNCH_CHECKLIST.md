@@ -4,7 +4,7 @@ Use this before making the repository public.
 
 ## Must pass
 
-- [x] `uv run --with-editable . --with pytest --with httpx pytest -q` (137 passing as of 2026-05-14)
+- [x] `uv run --with-editable . --with pytest --with httpx pytest -q` (140 passing as of 2026-10-03, also with `GITHUB_ACTIONS=true` in a clean env)
 - [x] `uv run --with-editable . switchboard --help`
 - [ ] GitHub Actions CI passes on Python 3.11 and 3.12 (verify before flipping public)
 - [x] README explains the product in one sentence
@@ -43,5 +43,7 @@ Any example credential must be written as `[REDACTED]` or an obvious placeholder
 
 - [x] `LICENSE` present (MIT)
 - [ ] Add issue templates if desired
+- [x] Tag-triggered PyPI release workflow (`.github/workflows/release.yml`, trusted publishing, distribution `switchboard-agent`)
+- [ ] Configure the PyPI trusted publisher for `release.yml` (environment `pypi`)
 - [ ] Add release tag once CI is green and one human has eyeballed the README
 - [ ] Decide whether default branch should be `main` or stay `master`
