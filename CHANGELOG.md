@@ -27,6 +27,7 @@ All notable changes to Switchboard follow this file. Format roughly follows [Kee
 - `AgentRecord` now carries optional `worktree_path` and `worktree_branch` fields. Migration is additive: existing databases pick up the columns on next `init`.
 - `TmuxClient.start_agent` now takes the resolved shell command directly. Per-kind dispatch moved into `switchboard.agent_kinds`.
 - Dashboard `agents` table grew a Worktree column.
+- The PyPI distribution is named `switchboard-agent` (`switchboard` is taken on PyPI). The import package and the `switchboard` command are unchanged.
 
 ## 0.1.0 history (pre-public)
 

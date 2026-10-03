@@ -18,7 +18,18 @@ It is built for developers who want multiple agents working on the same repo wit
 - handle Telegram-style commands via Hermes or a real Telegram bot
 - polished multi-page web dashboard with a dedicated route per nav item: Overview, Search, Agents, Tasks, Activity, Comms, Approvals, Workflows, Logs, Strategy, Analytics, Knowledge Base, Experiments, Skills — plus a one-click **Live mode** that auto-reloads on state change
 
-## Install/dev
+## Install
+
+Switchboard is published on PyPI as `switchboard-agent` (the name `switchboard` was taken). The command it installs is `switchboard`.
+
+```bash
+uv tool install switchboard-agent   # or: pipx install switchboard-agent
+switchboard --help
+```
+
+Runtime requirements: Python 3.11+, `tmux`, `git`, and the agent CLIs you want to drive (`claude`, `codex`, ...).
+
+## Develop
 
 ```bash
 git clone https://github.com/Aaditya2605/switchboard.git
@@ -27,7 +38,7 @@ uv run --with-editable . --with pytest --with httpx pytest -q
 uv run --with-editable . switchboard --help
 ```
 
-Install as a local tool:
+Install your checkout as a local tool:
 
 ```bash
 uv tool install --editable .

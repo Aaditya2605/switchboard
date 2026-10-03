@@ -1,12 +1,28 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "switchboard"
+name = "switchboard-agent"
 version = "0.1.0"
 description = "Persistent command center for Claude Code and Codex agents."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Aaditya Gaur" }]
 requires-python = ">=3.11"
 dependencies = ["typer>=0.12", "fastapi>=0.115", "uvicorn>=0.30"]
 
+[project.urls]
+Homepage = "https://github.com/Aaditya2605/switchboard"
+Issues = "https://github.com/Aaditya2605/switchboard/issues"
+Changelog = "https://github.com/Aaditya2605/switchboard/blob/master/CHANGELOG.md"
+
 [project.scripts]
 switchboard = "switchboard.cli:app"
+
+[tool.setuptools]
+packages = ["switchboard"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
